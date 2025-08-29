@@ -5,6 +5,7 @@ import { SpeedInsights } from "@vercel/speed-insights/next"
 import { useEffect } from 'react'
 import { warmupServiceWorker } from '@/services/swWarmup'
 import DebugPanel from '../components/DebugPanel'
+import OfflineIndicator from '../components/OfflineIndicator'
 
 const rasa = Rasa({
   subsets: ['latin'],
@@ -48,12 +49,21 @@ export default function App({ Component, pageProps }: AppProps) {
           });
           return registration;
         } catch (err) {
-          if (window.__SW_DEBUG) {
-            window.__SW_DEBUG.lastError = (err as Error).message;
-            window.__SW_DEBUG.status = 'error';
+          console.warn('[SW] Main SW failed, trying simple fallback:', (err as Error).message);
+          try {
+            // Fallback to simple service worker
+            const simpleRegistration = await navigator.serviceWorker.register('/sw-simple.js', { scope: '/' });
+            console.log('[SW] Simple SW registered successfully');
+            if (window.__SW_DEBUG) window.__SW_DEBUG.status = 'registered-simple';
+            return simpleRegistration;
+          } catch (simpleErr) {
+            if (window.__SW_DEBUG) {
+              window.__SW_DEBUG.lastError = (simpleErr as Error).message;
+              window.__SW_DEBUG.status = 'error';
+            }
+            console.warn('[SW] Simple SW also failed:', simpleErr);
+            return null;
           }
-          console.warn('[SW] Registration attempt failed:', err);
-          return null;
         }
       };
 
@@ -110,7 +120,29 @@ export default function App({ Component, pageProps }: AppProps) {
         }, 5000);
       };
 
+      // Force registration immediately
       ensureRegistered();
+
+      // Add heartbeat to check SW status every 10 seconds
+      const heartbeat = setInterval(() => {
+        if (!navigator.serviceWorker.controller) {
+          console.warn('[SW] No controller detected, attempting re-registration');
+          ensureRegistered();
+        }
+      }, 10000);
+
+      // Add offline/online detection
+      const handleOnlineStatus = () => {
+        const isOnline = navigator.onLine;
+        console.log('[SW] Network status changed:', isOnline ? 'online' : 'offline');
+        if (isOnline && !navigator.serviceWorker.controller) {
+          console.log('[SW] Came back online, checking SW registration');
+          ensureRegistered();
+        }
+      };
+
+      window.addEventListener('online', handleOnlineStatus);
+      window.addEventListener('offline', handleOnlineStatus);
     }
 
     // Global error handler for uncaught exceptions
@@ -147,6 +179,7 @@ export default function App({ Component, pageProps }: AppProps) {
       <Component {...pageProps} />
       <SpeedInsights />
       <DebugPanel />
+      <OfflineIndicator />
     </main>
   )
 }
