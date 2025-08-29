@@ -7,7 +7,6 @@ import { warmupServiceWorker } from '@/services/swWarmup'
 import { contentDownloader } from '@/services/contentDownloader'
 import DebugPanel from '../components/DebugPanel'
 import OfflineIndicator from '../components/OfflineIndicator'
-import ContentDownloadIndicator from '../components/ContentDownloadIndicator'
 
 const rasa = Rasa({
   subsets: ['latin'],
@@ -189,7 +188,6 @@ export default function App({ Component, pageProps }: AppProps) {
       <SpeedInsights />
       <DebugPanel />
       <OfflineIndicator />
-      <ContentDownloadIndicator />
     </main>
   )
 }
