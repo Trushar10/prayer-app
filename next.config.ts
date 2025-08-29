@@ -4,8 +4,9 @@ const withPWA = require('next-pwa')({
   dest: 'public',
   register: false, // We'll register manually in usePWA hook
   skipWaiting: true,
-  disable: false, // Enable in both environments for testing
-  sw: 'sw.js', // Use the direct service worker file
+  disable: false, // Enable for testing
+  swSrc: 'src/sw.simple.js', // Use our custom service worker
+  swDest: 'public/sw.js',
   fallbacks: {
     document: '/offline',
   },

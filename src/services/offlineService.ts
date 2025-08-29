@@ -14,25 +14,37 @@ class OfflineService {
       
       // First, cache the app shell and essential pages
       try {
-        const appShellUrls = [
+        // Dynamic discovery of current build assets
+        let appShellUrls = [
           '/', 
           '/offline', 
-          '/manifest.json',
-          '/_next/static/css/c17eec73476ddc06.css',
-          '/_next/static/chunks/main-e9932c24240317b9.js',
-          '/_next/static/chunks/framework-768692517470e708.js',
-          '/_next/static/chunks/webpack-5e931bb610e47be1.js',
-          '/_next/static/chunks/polyfills-42372ed130431b0a.js',
-          '/_next/static/chunks/pages/_app-8443a12e2f98cfae.js',
-          '/_next/static/chunks/pages/index-3813d919bedf1edf.js',
-          '/_next/static/chunks/pages/[slug]-5c5a6c907a2a6925.js',
+          '/manifest.json'
         ];
+        
+        // Try to discover current build assets from the home page
+        try {
+          const homeResponse = await fetch('/');
+          if (homeResponse.ok) {
+            const homeText = await homeResponse.text();
+            
+            // Extract current CSS and JS files from the HTML
+            const cssFiles = homeText.match(/\/_next\/static\/css\/[^"']+\.css/g) || [];
+            const jsFiles = homeText.match(/\/_next\/static\/chunks\/[^"']+\.js/g) || [];
+            
+            // Add discovered assets to cache list
+            appShellUrls = [...appShellUrls, ...cssFiles, ...jsFiles];
+            console.log('Discovered assets for caching:', [...cssFiles, ...jsFiles]);
+          }
+        } catch (discoveryError) {
+          console.warn('Failed to discover assets, using basic shell only:', discoveryError);
+        }
         
         const appShellPromises = appShellUrls.map(async (url) => {
           try {
             const response = await fetch(url);
             if (response.ok) {
               await cache.put(url, response.clone());
+              console.log(`Successfully cached: ${url}`);
             }
           } catch (error) {
             console.warn(`Failed to cache app shell resource ${url}:`, error);

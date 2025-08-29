@@ -142,30 +142,89 @@ self.addEventListener('install', (event) => {
 	// Cache essential pages immediately and aggressively
 	event.waitUntil(
 		Promise.all([
-			// Cache in essential cache - including all main pages
-			caches.open(`essential-cache-${CACHE_VERSION}`).then((cache) => {
-				return cache
-					.addAll([
-						'/',
-						'/offline',
-						'/manifest.json',
-						'/_next/static/css/c17eec73476ddc06.css', // Main CSS file
-						'/_next/static/chunks/main-e9932c24240317b9.js', // Main JS
-						'/_next/static/chunks/framework-768692517470e708.js', // React framework
-						'/_next/static/chunks/webpack-5e931bb610e47be1.js', // Webpack runtime
-					])
-					.catch((error) => {
-						console.warn(
-							'Failed to cache essential resources:',
-							error
-						);
-					});
+			// Cache in essential cache - with dynamic resource discovery
+			caches.open(`essential-cache-${CACHE_VERSION}`).then(async (cache) => {
+				// Essential pages that should always work
+				const essentialUrls = [
+					'/',
+					'/offline',
+					'/manifest.json'
+				];
+
+				// Try to cache each essential URL
+				for (const url of essentialUrls) {
+					try {
+						await cache.add(url);
+						console.log(`Successfully cached essential: ${url}`);
+					} catch (error) {
+						console.warn(`Failed to cache essential ${url}:`, error);
+					}
+				}
+
+				// Try to discover and cache critical assets dynamically
+				try {
+					// Get the home page to extract asset URLs
+					const homeResponse = await fetch('/');
+					if (homeResponse.ok) {
+						const homeText = await homeResponse.text();
+						
+						// Extract CSS and JS file references from the HTML
+						const cssMatches = homeText.match(/\/_next\/static\/css\/[^"']+\.css/g) || [];
+						const jsMatches = homeText.match(/\/_next\/static\/chunks\/[^"']+\.js/g) || [];
+						
+						// Also extract webpack and framework chunks which are critical for React functionality
+						const additionalJsMatches = homeText.match(/\/_next\/static\/chunks\/framework[^"']*\.js/g) || [];
+						const webpackMatches = homeText.match(/\/_next\/static\/chunks\/webpack[^"']*\.js/g) || [];
+						const mainMatches = homeText.match(/\/_next\/static\/chunks\/main[^"']*\.js/g) || [];
+						
+						// Cache discovered assets
+						const assetUrls = [
+							...cssMatches, 
+							...jsMatches, 
+							...additionalJsMatches, 
+							...webpackMatches, 
+							...mainMatches
+						];
+						
+						console.log('Discovered assets to cache:', assetUrls);
+						
+						for (const assetUrl of assetUrls) {
+							try {
+								await cache.add(assetUrl);
+								console.log(`Successfully cached discovered asset: ${assetUrl}`);
+							} catch (error) {
+								console.warn(`Failed to cache asset ${assetUrl}:`, error);
+							}
+						}
+						
+						// Also cache the main app page scripts from the pages directory
+						try {
+							const pageJsMatches = homeText.match(/\/_next\/static\/chunks\/pages\/[^"']+\.js/g) || [];
+							for (const pageJs of pageJsMatches) {
+								try {
+									await cache.add(pageJs);
+									console.log(`Successfully cached page JS: ${pageJs}`);
+								} catch (error) {
+									console.warn(`Failed to cache page JS ${pageJs}:`, error);
+								}
+							}
+						} catch (error) {
+							console.warn('Failed to cache page JS files:', error);
+						}
+					}
+				} catch (error) {
+					console.warn('Failed to dynamically discover assets:', error);
+				}
 			}),
 			// Also cache in pages cache for better lookup
-			caches.open(`pages-cache-${CACHE_VERSION}`).then((cache) => {
-				return cache.addAll(['/', '/offline']).catch((error) => {
+			caches.open(`pages-cache-${CACHE_VERSION}`).then(async (cache) => {
+				try {
+					await cache.add('/');
+					await cache.add('/offline');
+					console.log('Successfully cached pages in pages cache');
+				} catch (error) {
 					console.warn('Failed to cache pages:', error);
-				});
+				}
 			}),
 		])
 	);
