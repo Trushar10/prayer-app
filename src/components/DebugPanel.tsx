@@ -5,6 +5,7 @@ interface DebugInfo {
   serviceWorkerStatus: string;
   cacheStatus: string[];
   themeStatus: string;
+  registrationError?: string;
 }
 
 export default function DebugPanel() {
@@ -12,7 +13,8 @@ export default function DebugPanel() {
     isOnline: true,
     serviceWorkerStatus: 'Unknown',
     cacheStatus: [],
-    themeStatus: 'Unknown'
+    themeStatus: 'Unknown',
+    registrationError: undefined
   });
 
   const [showDebug, setShowDebug] = useState(false);
@@ -23,7 +25,8 @@ export default function DebugPanel() {
         isOnline: navigator.onLine,
         serviceWorkerStatus: 'Not supported',
         cacheStatus: [],
-        themeStatus: document.documentElement.getAttribute('data-theme') || 'not set'
+        themeStatus: document.documentElement.getAttribute('data-theme') || 'not set',
+        registrationError: undefined
       };
 
       // Check service worker
@@ -45,6 +48,7 @@ export default function DebugPanel() {
           }
         } catch (error) {
           info.serviceWorkerStatus = 'Registration failed ❌';
+          info.registrationError = error instanceof Error ? error.message : 'Unknown error';
         }
       }
 
@@ -123,6 +127,11 @@ export default function DebugPanel() {
       
       <div><strong>Online:</strong> {debugInfo.isOnline ? '✅' : '❌'}</div>
       <div><strong>SW:</strong> {debugInfo.serviceWorkerStatus}</div>
+      {debugInfo.registrationError && (
+        <div style={{ color: '#ff6b6b', fontSize: '10px' }}>
+          <strong>Error:</strong> {debugInfo.registrationError}
+        </div>
+      )}
       <div><strong>Theme:</strong> {debugInfo.themeStatus}</div>
       <div><strong>Caches ({debugInfo.cacheStatus.length}):</strong></div>
       <div style={{ maxHeight: '100px', overflow: 'auto', marginLeft: '10px' }}>
@@ -141,10 +150,44 @@ export default function DebugPanel() {
             padding: '5px 10px',
             borderRadius: '3px',
             cursor: 'pointer',
-            marginRight: '5px'
+            marginRight: '5px',
+            fontSize: '10px'
           }}
         >
           Reload
+        </button>
+        <button
+          onClick={async () => {
+            try {
+              // First check if SW file is accessible
+              const swResponse = await fetch('/sw.js');
+              console.log('SW file fetch response:', swResponse.status, swResponse.statusText);
+              
+              if (!swResponse.ok) {
+                alert(`SW file not accessible: ${swResponse.status} ${swResponse.statusText}`);
+                return;
+              }
+              
+              const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+              console.log('Manual SW registration successful:', registration);
+              alert('SW registration successful! Check console for details.');
+            } catch (error) {
+              console.error('Manual SW registration failed:', error);
+              alert('SW registration failed: ' + (error instanceof Error ? error.message : 'Unknown error'));
+            }
+          }}
+          style={{
+            background: '#007bff',
+            color: 'white',
+            border: 'none',
+            padding: '5px 10px',
+            borderRadius: '3px',
+            cursor: 'pointer',
+            marginRight: '5px',
+            fontSize: '10px'
+          }}
+        >
+          Test SW
         </button>
         <button
           onClick={async () => {
@@ -160,7 +203,8 @@ export default function DebugPanel() {
             border: 'none',
             padding: '5px 10px',
             borderRadius: '3px',
-            cursor: 'pointer'
+            cursor: 'pointer',
+            fontSize: '10px'
           }}
         >
           Clear Cache

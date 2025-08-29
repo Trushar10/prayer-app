@@ -17,23 +17,32 @@ export default function App({ Component, pageProps }: AppProps) {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       const registerSW = async () => {
         try {
-          // Direct service worker registration
-          const registration = await navigator.serviceWorker.register('/sw.js', {
-            scope: '/'
-          });
-          console.log('Service Worker registered:', registration);
-          
-          // Listen for updates
-          registration.addEventListener('updatefound', () => {
-            const newWorker = registration.installing;
-            if (newWorker) {
-              newWorker.addEventListener('statechange', () => {
-                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  console.log('New service worker installed');
-                }
-              });
-            }
-          });
+          // Try workbox registration first (preferred by next-pwa)
+          const windowWithWorkbox = window as unknown as { workbox?: { register: () => Promise<ServiceWorkerRegistration> } };
+          if (windowWithWorkbox.workbox) {
+            console.log('Using workbox registration');
+            await windowWithWorkbox.workbox.register();
+            console.log('Workbox service worker registered');
+          } else {
+            console.log('Using direct service worker registration');
+            // Direct service worker registration as fallback
+            const registration = await navigator.serviceWorker.register('/sw.js', {
+              scope: '/'
+            });
+            console.log('Service Worker registered:', registration);
+            
+            // Listen for updates
+            registration.addEventListener('updatefound', () => {
+              const newWorker = registration.installing;
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    console.log('New service worker installed');
+                  }
+                });
+              }
+            });
+          }
         } catch (error) {
           console.error('Service Worker registration failed:', error);
         }

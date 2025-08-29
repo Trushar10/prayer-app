@@ -9,11 +9,32 @@ const withPWA = require('next-pwa')({
   fallbacks: {
     document: '/offline',
   },
+  buildExcludes: [/middleware-manifest\.json$/],
+  // Ensure workbox is available for registration
+  scope: '/',
+  cacheOnFrontEndNav: true,
 });
 
 module.exports = withPWA({
   reactStrictMode: true,
   images: {
     domains: ['images.ctfassets.net'],
+  },
+  async headers() {
+    return [
+      {
+        source: '/sw.js',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=0, must-revalidate',
+          },
+          {
+            key: 'Content-Type',
+            value: 'application/javascript; charset=utf-8',
+          },
+        ],
+      },
+    ];
   },
 });
