@@ -40,57 +40,45 @@ export default function App({ Component, pageProps }: AppProps) {
       
       return registration;
     } catch (err) {
-      console.warn('[SW] Main SW failed:', (err as Error).message);
+      console.error('[SW] Main SW registration failed:', (err as Error).message);
       
-      // Try simple fallback
-      try {
-        console.log('[SW] Trying simple SW fallback...');
-        const simpleRegistration = await navigator.serviceWorker.register('/sw-simple.js', { scope: '/' });
-        console.log('[SW] Simple SW registered successfully');
-        
-        if (window.__SW_DEBUG) window.__SW_DEBUG.status = 'registered-simple';
-        return simpleRegistration;
-      } catch (simpleErr) {
-        console.error('[SW] Simple SW also failed:', simpleErr);
-        
-        if (window.__SW_DEBUG) {
-          window.__SW_DEBUG.lastError = (simpleErr as Error).message;
-          window.__SW_DEBUG.status = 'error';
-        }
-        return null;
+      if (window.__SW_DEBUG) {
+        window.__SW_DEBUG.lastError = (err as Error).message;
+        window.__SW_DEBUG.status = 'error';
       }
+      return null;
     }
   };
 
-      const registerWithRetries = async () => {
-        console.log('[SW] Starting registration process...');
-        
-        let registration: ServiceWorkerRegistration | null = null;
-        for (let i = 0; i < 3 && !registration; i++) {
-          console.log(`[SW] Registration attempt ${i + 1}/3`);
-          registration = await attemptRegistration();
-          if (!registration) {
-            console.log(`[SW] Attempt ${i + 1} failed, waiting before retry...`);
-            await new Promise(r => setTimeout(r, 1000 * (i + 1))); // backoff
-          }
+  const registerWithRetries = async () => {
+    console.log('[SW] Starting registration process...');
+    
+    let registration: ServiceWorkerRegistration | null = null;
+    for (let i = 0; i < 3 && !registration; i++) {
+      console.log(`[SW] Registration attempt ${i + 1}/3`);
+      registration = await attemptRegistration();
+      if (!registration) {
+        console.log(`[SW] Attempt ${i + 1} failed, waiting before retry...`);
+        await new Promise(r => setTimeout(r, 1000 * (i + 1))); // backoff
+      }
+    }
+    
+    if (!registration) {
+      console.error('[SW] All registration attempts failed. Debug:', window.__SW_DEBUG);
+    } else {
+      console.log('[SW] Registration successful after', window.__SW_DEBUG?.attempts, 'attempt(s)');
+      
+      // Start content download after SW is ready
+      navigator.serviceWorker.ready.then(async () => {
+        console.log('[SW] SW ready - starting content download...');
+        try {
+          await contentDownloader.downloadAllContent();
+        } catch (error) {
+          console.error('[SW] Content download failed:', error);
         }
-        
-        if (!registration) {
-          console.error('[SW] All registration attempts failed. Debug:', window.__SW_DEBUG);
-        } else {
-          console.log('[SW] Registration successful after', window.__SW_DEBUG?.attempts, 'attempt(s)');
-          
-          // Start content download after SW is ready
-          navigator.serviceWorker.ready.then(async () => {
-            console.log('[SW] SW ready - starting content download...');
-            try {
-              await contentDownloader.downloadAllContent();
-            } catch (error) {
-              console.error('[SW] Content download failed:', error);
-            }
-          });
-        }
-      };
+      });
+    }
+  };
 
       // If already controlled, skip
       // Controller change -> reload once to get SW control on initial install

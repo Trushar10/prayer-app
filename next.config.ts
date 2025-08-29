@@ -5,7 +5,6 @@ const withPWA = require('next-pwa')({
   register: false, // We'll register manually in _app.tsx
   skipWaiting: true,
   disable: false, // Re-enabled for production
-  swSrc: 'src/sw.simple.js', // Use our custom service worker
   fallbacks: {
     document: '/offline',
   },
@@ -24,19 +23,6 @@ module.exports = withPWA({
     return [
       {
         source: '/sw.js',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=0, must-revalidate',
-          },
-          {
-            key: 'Content-Type',
-            value: 'application/javascript; charset=utf-8',
-          },
-        ],
-      },
-      {
-        source: '/sw-simple.js',
         headers: [
           {
             key: 'Cache-Control',
