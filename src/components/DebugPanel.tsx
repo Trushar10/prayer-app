@@ -6,6 +6,9 @@ interface DebugInfo {
   cacheStatus: string[];
   themeStatus: string;
   registrationError?: string;
+  controller?: boolean;
+  swAttempts?: number;
+  swLastError?: string;
 }
 
 export default function DebugPanel() {
@@ -26,7 +29,10 @@ export default function DebugPanel() {
         serviceWorkerStatus: 'Not supported',
         cacheStatus: [],
         themeStatus: document.documentElement.getAttribute('data-theme') || 'not set',
-        registrationError: undefined
+        registrationError: undefined,
+        controller: !!navigator.serviceWorker?.controller,
+        swAttempts: (window as any).__SW_DEBUG?.attempts,
+        swLastError: (window as any).__SW_DEBUG?.lastError
       };
 
       // Check service worker
@@ -127,6 +133,13 @@ export default function DebugPanel() {
       
       <div><strong>Online:</strong> {debugInfo.isOnline ? '✅' : '❌'}</div>
       <div><strong>SW:</strong> {debugInfo.serviceWorkerStatus}</div>
+      <div><strong>Controller:</strong> {debugInfo.controller ? 'Yes' : 'No'}</div>
+      {typeof debugInfo.swAttempts === 'number' && (
+        <div><strong>Attempts:</strong> {debugInfo.swAttempts}</div>
+      )}
+      {debugInfo.swLastError && (
+        <div style={{ color: '#ffb347', fontSize: '10px' }}>Last Error: {debugInfo.swLastError}</div>
+      )}
       {debugInfo.registrationError && (
         <div style={{ color: '#ff6b6b', fontSize: '10px' }}>
           <strong>Error:</strong> {debugInfo.registrationError}

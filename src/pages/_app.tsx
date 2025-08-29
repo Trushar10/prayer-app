@@ -13,42 +13,73 @@ const rasa = Rasa({
 
 export default function App({ Component, pageProps }: AppProps) {
   useEffect(() => {
-    // Register service worker for PWA functionality
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-      const registerSW = async () => {
+      // Expose simple debug object
+      (window as any).__SW_DEBUG = { attempts: 0, lastError: null, status: 'init' };
+
+      const attemptRegistration = async (): Promise<ServiceWorkerRegistration | null> => {
+        (window as any).__SW_DEBUG.attempts++;
         try {
-          // Try workbox registration first (preferred by next-pwa)
+          // Confirm file is actually reachable before calling register
+            const swResp = await fetch('/sw.js?cacheBust=' + Date.now(), { method: 'GET' });
+            if (!swResp.ok) {
+              throw new Error('sw.js not reachable. HTTP ' + swResp.status);
+            }
           const windowWithWorkbox = window as unknown as { workbox?: { register: () => Promise<ServiceWorkerRegistration> } };
+          let registration: ServiceWorkerRegistration;
           if (windowWithWorkbox.workbox) {
-            console.log('Using workbox registration');
-            await windowWithWorkbox.workbox.register();
-            console.log('Workbox service worker registered');
+            console.log('[SW] Using workbox.register()');
+            registration = await windowWithWorkbox.workbox.register();
           } else {
-            console.log('Using direct service worker registration');
-            // Direct service worker registration as fallback
-            const registration = await navigator.serviceWorker.register('/sw.js', {
-              scope: '/'
-            });
-            console.log('Service Worker registered:', registration);
-            
-            // Listen for updates
-            registration.addEventListener('updatefound', () => {
-              const newWorker = registration.installing;
-              if (newWorker) {
-                newWorker.addEventListener('statechange', () => {
-                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    console.log('New service worker installed');
-                  }
-                });
-              }
-            });
+            console.log('[SW] Using navigator.serviceWorker.register("/sw.js")');
+            registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
           }
-        } catch (error) {
-          console.error('Service Worker registration failed:', error);
+          console.log('[SW] Registration object:', registration);
+          (window as any).__SW_DEBUG.status = 'registered';
+          // Attach update diagnostics
+          registration.addEventListener('updatefound', () => {
+            const nw = registration.installing;
+            console.log('[SW] updatefound, installing state:', nw?.state);
+            nw?.addEventListener('statechange', () => {
+              console.log('[SW] installing statechange ->', nw.state);
+            });
+          });
+          return registration;
+        } catch (err) {
+          (window as any).__SW_DEBUG.lastError = (err as Error).message;
+          (window as any).__SW_DEBUG.status = 'error';
+          console.warn('[SW] Registration attempt failed:', err);
+          return null;
         }
       };
 
-      registerSW();
+      const registerWithRetries = async () => {
+        // Wait for window load to avoid race with Next.js client chunks
+        if (document.readyState !== 'complete') {
+          await new Promise<void>(res => window.addEventListener('load', () => res(), { once: true }));
+        }
+        // Small delay to ensure sw.js copied / served
+        await new Promise(r => setTimeout(r, 150));
+        let registration: ServiceWorkerRegistration | null = null;
+        for (let i = 0; i < 3 && !registration; i++) {
+          registration = await attemptRegistration();
+          if (!registration) {
+            await new Promise(r => setTimeout(r, 500 * (i + 1))); // backoff
+          }
+        }
+        if (!registration) {
+          console.error('[SW] Failed to register after retries. Debug:', (window as any).__SW_DEBUG);
+        } else {
+          console.log('[SW] Registered successfully after', (window as any).__SW_DEBUG.attempts, 'attempt(s)');
+        }
+      };
+
+      // If already controlled, skip
+      if (navigator.serviceWorker.controller) {
+        console.log('[SW] Existing controller detected, skipping re-registration');
+      } else {
+        registerWithRetries();
+      }
     }
 
     // Global error handler for uncaught exceptions
