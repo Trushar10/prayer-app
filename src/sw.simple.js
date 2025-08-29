@@ -84,14 +84,14 @@ registerRoute(
 	})
 );
 
-// Cache static assets (JS, CSS, images)
+// Cache static assets (JS, CSS, images) with long-term caching
 registerRoute(
 	({ request }) =>
 		request.destination === 'script' ||
 		request.destination === 'style' ||
 		request.destination === 'image' ||
 		request.destination === 'font',
-	new StaleWhileRevalidate({
+	new CacheFirst({
 		cacheName: 'static-resources',
 		plugins: [
 			new CacheableResponsePlugin({
@@ -99,6 +99,23 @@ registerRoute(
 			}),
 			new ExpirationPlugin({
 				maxEntries: 200,
+				maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
+			}),
+		],
+	})
+);
+
+// Cache all _next static files aggressively
+registerRoute(
+	({ url }) => url.pathname.startsWith('/_next/static/'),
+	new CacheFirst({
+		cacheName: 'next-static-cache',
+		plugins: [
+			new CacheableResponsePlugin({
+				statuses: [0, 200],
+			}),
+			new ExpirationPlugin({
+				maxEntries: 300,
 				maxAgeSeconds: 60 * 60 * 24 * 365, // 1 year
 			}),
 		],
@@ -127,15 +144,20 @@ self.addEventListener('install', (event) => {
 	// Cache essential pages immediately and aggressively
 	event.waitUntil(
 		Promise.all([
-			// Cache in essential cache
+			// Cache in essential cache - including all main pages
 			caches.open(`essential-cache-${CACHE_VERSION}`).then((cache) => {
 				return cache
-					.addAll(['/', '/offline', '/manifest.json'])
+					.addAll([
+						'/',
+						'/offline', 
+						'/manifest.json',
+						'/_next/static/css/c17eec73476ddc06.css', // Main CSS file
+						'/_next/static/chunks/main-e9932c24240317b9.js', // Main JS
+						'/_next/static/chunks/framework-768692517470e708.js', // React framework
+						'/_next/static/chunks/webpack-5e931bb610e47be1.js', // Webpack runtime
+					])
 					.catch((error) => {
-						console.warn(
-							'Failed to cache essential resources:',
-							error
-						);
+						console.warn('Failed to cache essential resources:', error);
 					});
 			}),
 			// Also cache in pages cache for better lookup
@@ -186,18 +208,18 @@ self.addEventListener('activate', (event) => {
 
 // Handle fetch events for better offline support
 self.addEventListener('fetch', (event) => {
-	// Handle navigation requests specially
+	// Handle navigation requests specially for offline-first behavior
 	if (event.request.mode === 'navigate') {
 		event.respondWith(
-			// Try network first with short timeout
+			// Try network first with shorter timeout for better offline experience
 			Promise.race([
 				fetch(event.request),
 				new Promise((_, reject) =>
-					setTimeout(() => reject(new Error('Network timeout')), 1000)
+					setTimeout(() => reject(new Error('Network timeout')), 800)
 				),
 			])
 				.then((response) => {
-					// If online and successful, cache the response
+					// If online and successful, cache the response for future offline use
 					if (response.ok) {
 						const responseClone = response.clone();
 						Promise.all([
@@ -216,7 +238,8 @@ self.addEventListener('fetch', (event) => {
 										event.request.url.endsWith('/') ||
 										event.request.url.includes(
 											'localhost:3000'
-										)
+										) ||
+										event.request.url.includes(location.host)
 									) {
 										cache.put(
 											event.request,
@@ -230,101 +253,169 @@ self.addEventListener('fetch', (event) => {
 				})
 				.catch(async () => {
 					console.log(
-						'Offline - serving from cache for:',
+						'Network failed, serving from cache for:',
 						event.request.url
 					);
 
-					// Try multiple cache strategies when offline
-					// 1. Try exact URL match in pages cache
-					let cachedResponse = await caches.match(event.request);
+					// Aggressive offline fallback strategy for navigation
+					// 1. Try exact URL match across all caches
+					let cachedResponse = await caches.match(event.request, {
+						ignoreSearch: true,
+						ignoreVary: true
+					});
 					if (cachedResponse) {
-						console.log('Found exact match in cache');
+						console.log('Found exact navigation match in cache');
 						return cachedResponse;
 					}
 
-					// 2. Try pathname match in pages cache
+					// 2. Try pathname variations
 					const url = new URL(event.request.url);
 					const pathname = url.pathname;
-
-					const pagesCache = await caches.open(
-						`pages-cache-${CACHE_VERSION}`
-					);
-					cachedResponse = await pagesCache.match(pathname);
-					if (cachedResponse) {
-						console.log('Found pathname match in pages cache');
-						return cachedResponse;
+					
+					const cacheNames = [
+						`pages-cache-${CACHE_VERSION}`,
+						`essential-cache-${CACHE_VERSION}`,
+						'pages-cache', // fallback to old cache
+						'essential-cache-v1' // fallback to v1
+					];
+					
+					for (const cacheName of cacheNames) {
+						try {
+							const cache = await caches.open(cacheName);
+							
+							// Try exact pathname
+							cachedResponse = await cache.match(pathname);
+							if (cachedResponse) {
+								console.log(`Found pathname match in ${cacheName}`);
+								return cachedResponse;
+							}
+							
+							// Try with trailing slash
+							if (!pathname.endsWith('/')) {
+								cachedResponse = await cache.match(pathname + '/');
+								if (cachedResponse) {
+									console.log(`Found pathname with slash in ${cacheName}`);
+									return cachedResponse;
+								}
+							}
+							
+							// Try without trailing slash
+							if (pathname.endsWith('/') && pathname.length > 1) {
+								cachedResponse = await cache.match(pathname.slice(0, -1));
+								if (cachedResponse) {
+									console.log(`Found pathname without slash in ${cacheName}`);
+									return cachedResponse;
+								}
+							}
+						} catch (cacheError) {
+							console.warn(`Error accessing cache ${cacheName}:`, cacheError);
+						}
 					}
 
-					// 3. Try essential cache
-					const essentialCache = await caches.open(
-						`essential-cache-${CACHE_VERSION}`
-					);
-					cachedResponse = await essentialCache.match('/');
-					if (cachedResponse) {
-						console.log('Serving home page from essential cache');
-						return cachedResponse;
+					// 3. Try home page from any cache as fallback
+					for (const cacheName of cacheNames) {
+						try {
+							const cache = await caches.open(cacheName);
+							cachedResponse = await cache.match('/');
+							if (cachedResponse) {
+								console.log(`Serving home page from ${cacheName} as fallback`);
+								return cachedResponse;
+							}
+						} catch (cacheError) {
+							console.warn(`Error accessing home page in cache ${cacheName}:`, cacheError);
+						}
 					}
 
-					// 4. Try any available home page
-					cachedResponse = await caches.match('/');
-					if (cachedResponse) {
-						console.log('Found home page in any cache');
-						return cachedResponse;
-					}
-
-					// 5. Try offline page
-					cachedResponse = await caches.match('/offline');
-					if (cachedResponse) {
-						console.log('Serving offline page');
-						return cachedResponse;
-					}
-
-					// 6. Last resort - inline offline response
-					console.log('Serving inline offline response');
+					// 4. Last resort - enhanced inline offline response with proper styling
+					console.log('Serving enhanced inline offline response');
 					return new Response(
 						`<!DOCTYPE html>
-            <html>
-              <head>
-                <title>Offline - Prayer App</title>
-                <meta name="viewport" content="width=device-width, initial-scale=1">
-                <meta name="theme-color" content="#317EFB">
-                <style>
-                  body { 
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-                    margin: 0; padding: 50px 20px; text-align: center; 
-                    background: #f8f9fa; min-height: 100vh;
-                    display: flex; align-items: center; justify-content: center;
-                  }
-                  .offline-container { 
-                    background: white; padding: 40px; border-radius: 12px; 
-                    box-shadow: 0 4px 20px rgba(0,0,0,0.1); max-width: 400px; 
-                  }
-                  .offline { color: #666; }
-                  .back-btn { 
-                    margin: 10px 5px; padding: 12px 20px; 
-                    background: #317EFB; color: white; border: none; 
-                    border-radius: 8px; cursor: pointer; font-size: 14px;
-                    text-decoration: none; display: inline-block;
-                  }
-                  .back-btn:hover { background: #2563eb; }
-                  h1 { color: #317EFB; margin-bottom: 20px; }
-                </style>
-              </head>
-              <body>
-                <div class="offline-container">
-                  <div class="offline">
-                    <h1>📱 Prayer App</h1>
-                    <p><strong>You're currently offline</strong></p>
-                    <p>This content isn't available offline yet.</p>
-                    <p>Please connect to the internet or try:</p>
-                    <button class="back-btn" onclick="window.history.back()">← Go Back</button>
-                    <button class="back-btn" onclick="window.location.href='/'">🏠 Home</button>
-                    <br><br>
-                    <button class="back-btn" onclick="window.location.reload()" style="background:#6c757d">🔄 Retry</button>
-                  </div>
-                </div>
-              </body>
-            </html>`,
+<html lang="en" data-theme="light">
+  <head>
+    <title>Offline - Prayer App</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#317EFB">
+    <style>
+      :root {
+        --primary: #317EFB;
+        --primary-hover: #2563eb;
+        --bg: #f8f9fa;
+        --card-bg: white;
+        --text: #212529;
+        --text-muted: #666;
+        --border: #e9ecef;
+        --shadow: rgba(0,0,0,0.1);
+      }
+      
+      [data-theme="dark"] {
+        --bg: #121212;
+        --card-bg: #1e1e1e;
+        --text: #ffffff;
+        --text-muted: #aaa;
+        --border: #333;
+        --shadow: rgba(0,0,0,0.3);
+      }
+      
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      
+      body { 
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+        margin: 0; padding: 20px; text-align: center; 
+        background: var(--bg); min-height: 100vh; color: var(--text);
+        display: flex; align-items: center; justify-content: center;
+      }
+      
+      .offline-container { 
+        background: var(--card-bg); padding: 40px; border-radius: 12px; 
+        box-shadow: 0 4px 20px var(--shadow); max-width: 400px; 
+        border: 1px solid var(--border);
+      }
+      
+      .offline { color: var(--text-muted); }
+      
+      .back-btn { 
+        margin: 10px 5px; padding: 12px 20px; 
+        background: var(--primary); color: white; border: none; 
+        border-radius: 8px; cursor: pointer; font-size: 14px;
+        text-decoration: none; display: inline-block;
+        transition: background-color 0.2s ease;
+      }
+      
+      .back-btn:hover { background: var(--primary-hover); }
+      .retry-btn { background: #6c757d; }
+      .retry-btn:hover { background: #5a6268; }
+      
+      h1 { color: var(--primary); margin-bottom: 20px; font-size: 2em; }
+      p { margin-bottom: 16px; line-height: 1.5; }
+      strong { color: var(--text); }
+      
+      .status { 
+        background: #ffeaa7; color: #2d3436; padding: 12px; 
+        border-radius: 6px; margin: 16px 0; font-weight: 500;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="offline-container">
+      <div class="offline">
+        <h1>📱 Prayer App</h1>
+        <div class="status">You're currently offline</div>
+        <p><strong>This content isn't available offline yet.</strong></p>
+        <p>To access prayers offline, please:</p>
+        <ol style="text-align: left; margin: 16px 0; padding-left: 20px;">
+          <li>Connect to the internet</li>
+          <li>Use the download button (💾) to cache content</li>
+          <li>Then you can use the app offline</li>
+        </ol>
+        <button class="back-btn" onclick="window.history.back()">← Go Back</button>
+        <button class="back-btn" onclick="window.location.href='/'">🏠 Home</button>
+        <br><br>
+        <button class="back-btn retry-btn" onclick="window.location.reload()">🔄 Retry</button>
+      </div>
+    </div>
+  </body>
+</html>`,
 						{
 							headers: { 'Content-Type': 'text/html' },
 							status: 200,
@@ -332,6 +423,82 @@ self.addEventListener('fetch', (event) => {
 					);
 				})
 		);
+		return;
+	}
+	
+	// Handle API requests with aggressive offline-first caching
+	if (event.request.url.includes('/api/')) {
+		event.respondWith(
+			caches.match(event.request).then(async (cachedResponse) => {
+				if (cachedResponse) {
+					console.log('Serving API from cache:', event.request.url);
+					// Serve from cache immediately, update in background if online
+					if (navigator.onLine) {
+						fetch(event.request).then(response => {
+							if (response && response.ok) {
+								caches.open('prayers-api-cache').then(cache => {
+									cache.put(event.request, response.clone());
+								});
+							}
+						}).catch(() => {}); // Silent background update
+					}
+					return cachedResponse;
+				}
+				
+				// If not in cache, try network
+				return fetch(event.request).then(response => {
+					if (response && response.ok) {
+						const responseClone = response.clone();
+						caches.open('prayers-api-cache').then(cache => {
+							cache.put(event.request, responseClone);
+						});
+					}
+					return response;
+				}).catch(() => {
+					// Network failed and no cache available
+					console.log('API request failed offline:', event.request.url);
+					return new Response('{"error": "Content not available offline"}', {
+						status: 503,
+						headers: { 'Content-Type': 'application/json' }
+					});
+				});
+			})
+		);
+		return;
+	}
+	
+	// Handle static resources aggressively for offline functionality
+	if (
+		event.request.destination === 'script' ||
+		event.request.destination === 'style' ||
+		event.request.destination === 'image' ||
+		event.request.destination === 'font' ||
+		event.request.url.includes('/_next/static/') ||
+		event.request.url.includes('/static/')
+	) {
+		event.respondWith(
+			caches.match(event.request).then(async (cachedResponse) => {
+				if (cachedResponse) {
+					console.log('Serving static asset from cache:', event.request.url);
+					return cachedResponse;
+				}
+				
+				// Try to fetch and cache for future offline use
+				return fetch(event.request).then(response => {
+					if (response && response.ok) {
+						const responseClone = response.clone();
+						caches.open('static-resources').then(cache => {
+							cache.put(event.request, responseClone);
+						});
+					}
+					return response;
+				}).catch(() => {
+					console.log('Static asset failed offline:', event.request.url);
+					return new Response('', { status: 503 });
+				});
+			})
+		);
+		return;
 	}
 });
 

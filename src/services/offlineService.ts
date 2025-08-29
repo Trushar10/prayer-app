@@ -14,7 +14,20 @@ class OfflineService {
       
       // First, cache the app shell and essential pages
       try {
-        const appShellUrls = ['/', '/offline', '/manifest.json'];
+        const appShellUrls = [
+          '/', 
+          '/offline', 
+          '/manifest.json',
+          '/_next/static/css/c17eec73476ddc06.css',
+          '/_next/static/chunks/main-e9932c24240317b9.js',
+          '/_next/static/chunks/framework-768692517470e708.js',
+          '/_next/static/chunks/webpack-5e931bb610e47be1.js',
+          '/_next/static/chunks/polyfills-42372ed130431b0a.js',
+          '/_next/static/chunks/pages/_app-8443a12e2f98cfae.js',
+          '/_next/static/chunks/pages/index-3813d919bedf1edf.js',
+          '/_next/static/chunks/pages/[slug]-5c5a6c907a2a6925.js',
+        ];
+        
         const appShellPromises = appShellUrls.map(async (url) => {
           try {
             const response = await fetch(url);

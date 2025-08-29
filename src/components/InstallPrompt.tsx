@@ -68,87 +68,114 @@ const InstallPrompt: React.FC<InstallPromptProps> = ({ onDownloadComplete }) => 
   const handleInstallClick = async () => {
     if (!deferredPrompt) return;
 
-    // First download offline content
-    await downloadOfflineContent();
-
-    // Then show install prompt
     try {
+      // Show install prompt immediately to preserve user gesture
       await deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
       
       if (outcome === 'accepted') {
         setDeferredPrompt(null);
         setShowInstall(false);
+        
+        // Download offline content after successful installation
+        await downloadOfflineContent();
       }
     } catch (error) {
       console.error('Error showing install prompt:', error);
     }
   };
 
-  // Don't show if already installed
-  if (isInstalled || !showInstall) return null;
+  // Show download button for already installed apps, or install+download for new users
+  if (isInstalled) {
+    return (
+      <button
+        onClick={downloadOfflineContent}
+        disabled={isDownloading}
+        className="download-btn"
+        title={isDownloading ? `Downloading content... ${downloadProgress}%` : 'Download content for offline use'}
+        style={{
+          padding: '8px 12px',
+          backgroundColor: isDownloading ? '#6c757d' : '#28a745',
+          color: 'white',
+          border: 'none',
+          borderRadius: '6px',
+          cursor: isDownloading ? 'not-allowed' : 'pointer',
+          fontSize: '14px',
+          fontWeight: '500',
+          position: 'relative',
+          minWidth: isDownloading ? '120px' : '100px',
+          overflow: 'hidden',
+          transition: 'all 0.2s ease'
+        }}
+      >
+        {isDownloading ? (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <span 
+              style={{ 
+                width: '12px', 
+                height: '12px', 
+                border: '2px solid transparent',
+                borderTop: '2px solid white',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite'
+              }} 
+            />
+            {downloadProgress}%
+          </span>
+        ) : (
+          <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            � Download
+          </span>
+        )}
+        
+        {isDownloading && (
+          <div 
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              height: '2px',
+              backgroundColor: 'rgba(255, 255, 255, 0.3)',
+              width: `${downloadProgress}%`,
+              transition: 'width 0.3s ease'
+            }}
+          />
+        )}
+        
+        <style jsx>{`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}</style>
+      </button>
+    );
+  }
+
+  // Don't show if no install prompt available
+  if (!showInstall) return null;
 
   return (
     <button
       onClick={handleInstallClick}
       disabled={isDownloading}
       className="install-btn"
-      title={isDownloading ? `Downloading content... ${downloadProgress}%` : 'Install app for offline use'}
+      title="Install app to home screen"
       style={{
         padding: '8px 12px',
-        backgroundColor: isDownloading ? '#6c757d' : '#007bff',
+        backgroundColor: '#007bff',
         color: 'white',
         border: 'none',
         borderRadius: '6px',
-        cursor: isDownloading ? 'not-allowed' : 'pointer',
+        cursor: 'pointer',
         fontSize: '14px',
         fontWeight: '500',
-        position: 'relative',
-        minWidth: isDownloading ? '120px' : '100px',
-        overflow: 'hidden',
         transition: 'all 0.2s ease'
       }}
     >
-      {isDownloading ? (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <span 
-            style={{ 
-              width: '12px', 
-              height: '12px', 
-              border: '2px solid transparent',
-              borderTop: '2px solid white',
-              borderRadius: '50%',
-              animation: 'spin 1s linear infinite'
-            }} 
-          />
-          {downloadProgress}%
-        </span>
-      ) : (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          📱 Install
-        </span>
-      )}
-      
-      {isDownloading && (
-        <div 
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            height: '2px',
-            backgroundColor: 'rgba(255, 255, 255, 0.3)',
-            width: `${downloadProgress}%`,
-            transition: 'width 0.3s ease'
-          }}
-        />
-      )}
-      
-      <style jsx>{`
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `}</style>
+      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        📱 Install
+      </span>
     </button>
   );
 };
