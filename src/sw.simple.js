@@ -147,7 +147,7 @@ self.addEventListener('install', (event) => {
 				return cache
 					.addAll([
 						'/',
-						'/offline', 
+						'/offline',
 						'/manifest.json',
 						'/_next/static/css/c17eec73476ddc06.css', // Main CSS file
 						'/_next/static/chunks/main-e9932c24240317b9.js', // Main JS
@@ -155,7 +155,10 @@ self.addEventListener('install', (event) => {
 						'/_next/static/chunks/webpack-5e931bb610e47be1.js', // Webpack runtime
 					])
 					.catch((error) => {
-						console.warn('Failed to cache essential resources:', error);
+						console.warn(
+							'Failed to cache essential resources:',
+							error
+						);
 					});
 			}),
 			// Also cache in pages cache for better lookup
@@ -237,7 +240,9 @@ self.addEventListener('fetch', (event) => {
 										event.request.url.includes(
 											'localhost:3000'
 										) ||
-										event.request.url.includes(location.host)
+										event.request.url.includes(
+											location.host
+										)
 									) {
 										cache.put(
 											event.request,
@@ -259,7 +264,7 @@ self.addEventListener('fetch', (event) => {
 					// 1. Try exact URL match across all caches
 					let cachedResponse = await caches.match(event.request, {
 						ignoreSearch: true,
-						ignoreVary: true
+						ignoreVary: true,
 					});
 					if (cachedResponse) {
 						console.log('Found exact navigation match in cache');
@@ -269,44 +274,57 @@ self.addEventListener('fetch', (event) => {
 					// 2. Try pathname variations
 					const url = new URL(event.request.url);
 					const pathname = url.pathname;
-					
+
 					const cacheNames = [
 						`pages-cache-${CACHE_VERSION}`,
 						`essential-cache-${CACHE_VERSION}`,
 						'pages-cache', // fallback to old cache
-						'essential-cache-v1' // fallback to v1
+						'essential-cache-v1', // fallback to v1
 					];
-					
+
 					for (const cacheName of cacheNames) {
 						try {
 							const cache = await caches.open(cacheName);
-							
+
 							// Try exact pathname
 							cachedResponse = await cache.match(pathname);
 							if (cachedResponse) {
-								console.log(`Found pathname match in ${cacheName}`);
+								console.log(
+									`Found pathname match in ${cacheName}`
+								);
 								return cachedResponse;
 							}
-							
+
 							// Try with trailing slash
 							if (!pathname.endsWith('/')) {
-								cachedResponse = await cache.match(pathname + '/');
+								cachedResponse = await cache.match(
+									pathname + '/'
+								);
 								if (cachedResponse) {
-									console.log(`Found pathname with slash in ${cacheName}`);
+									console.log(
+										`Found pathname with slash in ${cacheName}`
+									);
 									return cachedResponse;
 								}
 							}
-							
+
 							// Try without trailing slash
 							if (pathname.endsWith('/') && pathname.length > 1) {
-								cachedResponse = await cache.match(pathname.slice(0, -1));
+								cachedResponse = await cache.match(
+									pathname.slice(0, -1)
+								);
 								if (cachedResponse) {
-									console.log(`Found pathname without slash in ${cacheName}`);
+									console.log(
+										`Found pathname without slash in ${cacheName}`
+									);
 									return cachedResponse;
 								}
 							}
 						} catch (cacheError) {
-							console.warn(`Error accessing cache ${cacheName}:`, cacheError);
+							console.warn(
+								`Error accessing cache ${cacheName}:`,
+								cacheError
+							);
 						}
 					}
 
@@ -316,11 +334,16 @@ self.addEventListener('fetch', (event) => {
 							const cache = await caches.open(cacheName);
 							cachedResponse = await cache.match('/');
 							if (cachedResponse) {
-								console.log(`Serving home page from ${cacheName} as fallback`);
+								console.log(
+									`Serving home page from ${cacheName} as fallback`
+								);
 								return cachedResponse;
 							}
 						} catch (cacheError) {
-							console.warn(`Error accessing home page in cache ${cacheName}:`, cacheError);
+							console.warn(
+								`Error accessing home page in cache ${cacheName}:`,
+								cacheError
+							);
 						}
 					}
 
@@ -423,7 +446,7 @@ self.addEventListener('fetch', (event) => {
 		);
 		return;
 	}
-	
+
 	// Handle API requests with aggressive offline-first caching
 	if (event.request.url.includes('/api/')) {
 		event.respondWith(
@@ -432,39 +455,54 @@ self.addEventListener('fetch', (event) => {
 					console.log('Serving API from cache:', event.request.url);
 					// Serve from cache immediately, update in background if online
 					if (navigator.onLine) {
-						fetch(event.request).then(response => {
-							if (response && response.ok) {
-								caches.open('prayers-api-cache').then(cache => {
-									cache.put(event.request, response.clone());
-								});
-							}
-						}).catch(() => {}); // Silent background update
+						fetch(event.request)
+							.then((response) => {
+								if (response && response.ok) {
+									caches
+										.open('prayers-api-cache')
+										.then((cache) => {
+											cache.put(
+												event.request,
+												response.clone()
+											);
+										});
+								}
+							})
+							.catch(() => {}); // Silent background update
 					}
 					return cachedResponse;
 				}
-				
+
 				// If not in cache, try network
-				return fetch(event.request).then(response => {
-					if (response && response.ok) {
-						const responseClone = response.clone();
-						caches.open('prayers-api-cache').then(cache => {
-							cache.put(event.request, responseClone);
-						});
-					}
-					return response;
-				}).catch(() => {
-					// Network failed and no cache available
-					console.log('API request failed offline:', event.request.url);
-					return new Response('{"error": "Content not available offline"}', {
-						status: 503,
-						headers: { 'Content-Type': 'application/json' }
+				return fetch(event.request)
+					.then((response) => {
+						if (response && response.ok) {
+							const responseClone = response.clone();
+							caches.open('prayers-api-cache').then((cache) => {
+								cache.put(event.request, responseClone);
+							});
+						}
+						return response;
+					})
+					.catch(() => {
+						// Network failed and no cache available
+						console.log(
+							'API request failed offline:',
+							event.request.url
+						);
+						return new Response(
+							'{"error": "Content not available offline"}',
+							{
+								status: 503,
+								headers: { 'Content-Type': 'application/json' },
+							}
+						);
 					});
-				});
 			})
 		);
 		return;
 	}
-	
+
 	// Handle static resources aggressively for offline functionality
 	if (
 		event.request.destination === 'script' ||
@@ -477,23 +515,31 @@ self.addEventListener('fetch', (event) => {
 		event.respondWith(
 			caches.match(event.request).then(async (cachedResponse) => {
 				if (cachedResponse) {
-					console.log('Serving static asset from cache:', event.request.url);
+					console.log(
+						'Serving static asset from cache:',
+						event.request.url
+					);
 					return cachedResponse;
 				}
-				
+
 				// Try to fetch and cache for future offline use
-				return fetch(event.request).then(response => {
-					if (response && response.ok) {
-						const responseClone = response.clone();
-						caches.open('static-resources').then(cache => {
-							cache.put(event.request, responseClone);
-						});
-					}
-					return response;
-				}).catch(() => {
-					console.log('Static asset failed offline:', event.request.url);
-					return new Response('', { status: 503 });
-				});
+				return fetch(event.request)
+					.then((response) => {
+						if (response && response.ok) {
+							const responseClone = response.clone();
+							caches.open('static-resources').then((cache) => {
+								cache.put(event.request, responseClone);
+							});
+						}
+						return response;
+					})
+					.catch(() => {
+						console.log(
+							'Static asset failed offline:',
+							event.request.url
+						);
+						return new Response('', { status: 503 });
+					});
 			})
 		);
 		return;
