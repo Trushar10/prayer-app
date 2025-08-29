@@ -31,7 +31,7 @@ export interface CacheMetadata {
 
 class PrayerCacheManager {
   private dbName = 'PrayerCache';
-  private version = 3; // Increment version to force upgrade
+  private version = 4; // Bumped to 4 to force upgrade ensuring stores/indexes exist
   private db: IDBDatabase | null = null;
 
   // Initialize IndexedDB
@@ -61,7 +61,48 @@ class PrayerCacheManager {
 
         request.onsuccess = () => {
           this.db = request.result;
-          resolve();
+          // Defensive: verify required stores exist; if not, force rebuild
+          const requiredStores = ['prayers', 'metadata'];
+          const missing = requiredStores.filter(s => !this.db!.objectStoreNames.contains(s));
+          if (missing.length) {
+            console.warn('IndexedDB missing stores', missing, '— forcing rebuild');
+            this.db!.close();
+            const deleteReq = indexedDB.deleteDatabase(this.dbName);
+            deleteReq.onsuccess = () => {
+              // Re-open with same (already bumped) version to recreate
+              const reopen = indexedDB.open(this.dbName, this.version);
+              reopen.onupgradeneeded = (event) => {
+                try {
+                  const db2 = (event.target as IDBOpenDBRequest).result;
+                  if (!db2.objectStoreNames.contains('prayers')) {
+                    const prayersStore = db2.createObjectStore('prayers', { keyPath: 'id' });
+                    prayersStore.createIndex('language', 'language', { unique: false });
+                    prayersStore.createIndex('slug', 'slug', { unique: false });
+                    prayersStore.createIndex('cachedAt', 'cachedAt', { unique: false });
+                  }
+                  if (!db2.objectStoreNames.contains('metadata')) {
+                    db2.createObjectStore('metadata', { keyPath: 'key' });
+                  }
+                } catch (rebuildErr) {
+                  console.error('Error during rebuild upgrade:', rebuildErr);
+                }
+              };
+              reopen.onsuccess = () => {
+                this.db = reopen.result;
+                resolve();
+              };
+              reopen.onerror = () => {
+                console.error('Failed to reopen DB after rebuild:', reopen.error);
+                resolve();
+              };
+            };
+            deleteReq.onerror = () => {
+              console.error('Failed to delete DB for rebuild:', deleteReq.error);
+              resolve();
+            };
+          } else {
+            resolve();
+          }
         };
 
         request.onupgradeneeded = (event) => {
