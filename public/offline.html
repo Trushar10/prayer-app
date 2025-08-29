@@ -1,96 +1,156 @@
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
-  <head>
-    <title>Offline - Prayer App</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#317EFB">
-    <style>
-      :root {
-        --primary: #317EFB;
-        --primary-hover: #2563eb;
-        --bg: #f8f9fa;
-        --card-bg: white;
-        --text: #212529;
-        --text-muted: #666;
-        --border: #e9ecef;
-        --shadow: rgba(0,0,0,0.1);
-      }
+	<head>
+		<title>Offline - Prayer App</title>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="theme-color" content="#317EFB" />
+		<style>
+			:root {
+				--primary: #317efb;
+				--primary-hover: #2563eb;
+				--bg: #f8f9fa;
+				--card-bg: white;
+				--text: #212529;
+				--text-muted: #666;
+				--border: #e9ecef;
+				--shadow: rgba(0, 0, 0, 0.1);
+			}
 
-      [data-theme="dark"] {
-        --bg: #121212;
-        --card-bg: #1e1e1e;
-        --text: #ffffff;
-        --text-muted: #aaa;
-        --border: #333;
-        --shadow: rgba(0,0,0,0.3);
-      }
+			[data-theme='dark'] {
+				--bg: #121212;
+				--card-bg: #1e1e1e;
+				--text: #ffffff;
+				--text-muted: #aaa;
+				--border: #333;
+				--shadow: rgba(0, 0, 0, 0.3);
+			}
 
-      * { margin: 0; padding: 0; box-sizing: border-box; }
+			* {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+			}
 
-      body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-        margin: 0; padding: 20px; text-align: center;
-        background: var(--bg); min-height: 100vh; color: var(--text);
-        display: flex; align-items: center; justify-content: center;
-      }
+			body {
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI',
+					Arial, sans-serif;
+				margin: 0;
+				padding: 20px;
+				text-align: center;
+				background: var(--bg);
+				min-height: 100vh;
+				color: var(--text);
+				display: flex;
+				align-items: center;
+				justify-content: center;
+			}
 
-      .offline-container {
-        background: var(--card-bg); padding: 40px; border-radius: 12px;
-        box-shadow: 0 4px 20px var(--shadow); max-width: 400px;
-        border: 1px solid var(--border);
-      }
+			.offline-container {
+				background: var(--card-bg);
+				padding: 40px;
+				border-radius: 12px;
+				box-shadow: 0 4px 20px var(--shadow);
+				max-width: 400px;
+				border: 1px solid var(--border);
+			}
 
-      .offline { color: var(--text-muted); }
+			.offline {
+				color: var(--text-muted);
+			}
 
-      .back-btn {
-        margin: 10px 5px; padding: 12px 20px;
-        background: var(--primary); color: white; border: none;
-        border-radius: 8px; cursor: pointer; font-size: 14px;
-        text-decoration: none; display: inline-block;
-        transition: background-color 0.2s ease;
-      }
+			.back-btn {
+				margin: 10px 5px;
+				padding: 12px 20px;
+				background: var(--primary);
+				color: white;
+				border: none;
+				border-radius: 8px;
+				cursor: pointer;
+				font-size: 14px;
+				text-decoration: none;
+				display: inline-block;
+				transition: background-color 0.2s ease;
+			}
 
-      .back-btn:hover { background: var(--primary-hover); }
-      .retry-btn { background: #6c757d; }
-      .retry-btn:hover { background: #5a6268; }
+			.back-btn:hover {
+				background: var(--primary-hover);
+			}
+			.retry-btn {
+				background: #6c757d;
+			}
+			.retry-btn:hover {
+				background: #5a6268;
+			}
 
-      h1 { color: var(--primary); margin-bottom: 20px; font-size: 2em; }
-      p { margin-bottom: 16px; line-height: 1.5; }
-      strong { color: var(--text); }
+			h1 {
+				color: var(--primary);
+				margin-bottom: 20px;
+				font-size: 2em;
+			}
+			p {
+				margin-bottom: 16px;
+				line-height: 1.5;
+			}
+			strong {
+				color: var(--text);
+			}
 
-      .status {
-        background: #ffeaa7; color: #2d3436; padding: 12px;
-        border-radius: 6px; margin: 16px 0; font-weight: 500;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="offline-container">
-      <div class="offline">
-        <h1>📱 Prayer App</h1>
-        <div class="status">You're currently offline</div>
-        <p><strong>This content isn't available offline yet.</strong></p>
-        <p>To access prayers offline, please:</p>
-        <ol style="text-align: left; margin: 16px 0; padding-left: 20px;">
-          <li>Connect to the internet</li>
-          <li>Use the download button (💾) to cache content</li>
-          <li>Then you can use the app offline</li>
-        </ol>
-        <button class="back-btn" onclick="window.history.back()">← Go Back</button>
-        <button class="back-btn" onclick="window.location.href='/'">🏠 Home</button>
-        <br><br>
-        <button class="back-btn retry-btn" onclick="window.location.reload()">🔄 Retry</button>
-        <script>
-          // Apply stored theme immediately
-          (function(){
-            try {
-              var theme = localStorage.getItem('theme');
-              if(theme) document.documentElement.setAttribute('data-theme', theme);
-            } catch(e) { /* ignore */ }
-          })();
-        </script>
-      </div>
-    </div>
-  </body>
+			.status {
+				background: #ffeaa7;
+				color: #2d3436;
+				padding: 12px;
+				border-radius: 6px;
+				margin: 16px 0;
+				font-weight: 500;
+			}
+		</style>
+	</head>
+	<body>
+		<div class="offline-container">
+			<div class="offline">
+				<h1>📱 Prayer App</h1>
+				<div class="status">You're currently offline</div>
+				<p>
+					<strong>This content isn't available offline yet.</strong>
+				</p>
+				<p>To access prayers offline, please:</p>
+				<ol
+					style="text-align: left; margin: 16px 0; padding-left: 20px"
+				>
+					<li>Connect to the internet</li>
+					<li>Use the download button (💾) to cache content</li>
+					<li>Then you can use the app offline</li>
+				</ol>
+				<button class="back-btn" onclick="window.history.back()">
+					← Go Back
+				</button>
+				<button class="back-btn" onclick="window.location.href='/'">
+					🏠 Home
+				</button>
+				<br /><br />
+				<button
+					class="back-btn retry-btn"
+					onclick="window.location.reload()"
+				>
+					🔄 Retry
+				</button>
+				<script>
+					// Apply stored theme immediately
+					(function () {
+						try {
+							var theme = localStorage.getItem('theme');
+							if (theme)
+								document.documentElement.setAttribute(
+									'data-theme',
+									theme
+								);
+						} catch (e) {
+							/* ignore */
+						}
+					})();
+				</script>
+			</div>
+		</div>
+	</body>
 </html>

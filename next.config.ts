@@ -9,7 +9,7 @@ const withPWA = require('next-pwa')({
   fallbacks: {
     document: '/offline',
   },
-  buildExcludes: [/middleware-manifest\.json$/],
+  buildExcludes: [/middleware-manifest\.json$/, /dynamic-css-manifest\.json$/],
   // Ensure workbox is available for registration
   scope: '/',
   cacheOnFrontEndNav: true,

@@ -48,9 +48,39 @@ class PrayerCacheManager {
       return;
     }
 
+    // Force database cleanup on version change to prevent corruption
+    console.log('Initializing PrayerCache with version', this.version);
+    
     return new Promise((resolve) => {
       try {
         const request = indexedDB.open(this.dbName, this.version);
+
+        request.onerror = () => {
+          console.error('Failed to open IndexedDB:', request.error);
+          // Force delete and recreate on error
+          console.log('Forcing database deletion due to error');
+          const deleteReq = indexedDB.deleteDatabase(this.dbName);
+          deleteReq.onsuccess = () => {
+            console.log('Database deleted, reopening...');
+            const reopenReq = indexedDB.open(this.dbName, this.version);
+            reopenReq.onupgradeneeded = (event) => {
+              this.createObjectStores((event.target as IDBOpenDBRequest).result);
+            };
+            reopenReq.onsuccess = () => {
+              this.db = reopenReq.result;
+              console.log('Database recreated successfully');
+              resolve();
+            };
+            reopenReq.onerror = () => {
+              console.error('Failed to recreate database:', reopenReq.error);
+              resolve();
+            };
+          };
+          deleteReq.onerror = () => {
+            console.error('Failed to delete corrupted database');
+            resolve();
+          };
+        };
 
         request.onerror = () => {
           console.error('Failed to open IndexedDB:', request.error);
@@ -74,15 +104,7 @@ class PrayerCacheManager {
               reopen.onupgradeneeded = (event) => {
                 try {
                   const db2 = (event.target as IDBOpenDBRequest).result;
-                  if (!db2.objectStoreNames.contains('prayers')) {
-                    const prayersStore = db2.createObjectStore('prayers', { keyPath: 'id' });
-                    prayersStore.createIndex('language', 'language', { unique: false });
-                    prayersStore.createIndex('slug', 'slug', { unique: false });
-                    prayersStore.createIndex('cachedAt', 'cachedAt', { unique: false });
-                  }
-                  if (!db2.objectStoreNames.contains('metadata')) {
-                    db2.createObjectStore('metadata', { keyPath: 'key' });
-                  }
+                  this.createObjectStores(db2);
                 } catch (rebuildErr) {
                   console.error('Error during rebuild upgrade:', rebuildErr);
                 }
@@ -108,31 +130,8 @@ class PrayerCacheManager {
         request.onupgradeneeded = (event) => {
           try {
             const db = (event.target as IDBOpenDBRequest).result;
-            const transaction = (event.target as IDBOpenDBRequest).transaction;
-            
-            // Handle prayers store
-            let prayersStore: IDBObjectStore;
-            if (!db.objectStoreNames.contains('prayers')) {
-              prayersStore = db.createObjectStore('prayers', { keyPath: 'id' });
-            } else {
-              prayersStore = transaction!.objectStore('prayers');
-            }
-            
-            // Ensure all required indexes exist
-            if (!prayersStore.indexNames.contains('language')) {
-              prayersStore.createIndex('language', 'language', { unique: false });
-            }
-            if (!prayersStore.indexNames.contains('slug')) {
-              prayersStore.createIndex('slug', 'slug', { unique: false });
-            }
-            if (!prayersStore.indexNames.contains('cachedAt')) {
-              prayersStore.createIndex('cachedAt', 'cachedAt', { unique: false });
-            }
-
-            // Handle metadata store
-            if (!db.objectStoreNames.contains('metadata')) {
-              db.createObjectStore('metadata', { keyPath: 'key' });
-            }
+            console.log('Database upgrade needed, creating stores...');
+            this.createObjectStores(db);
           } catch (upgradeError) {
             console.error('Error during IndexedDB upgrade:', upgradeError);
             resolve(); // Continue without cache
@@ -143,6 +142,28 @@ class PrayerCacheManager {
         resolve(); // Continue without cache
       }
     });
+  }
+
+  // Helper method to create object stores
+  private createObjectStores(db: IDBDatabase): void {
+    try {
+      // Create prayers store
+      if (!db.objectStoreNames.contains('prayers')) {
+        const prayersStore = db.createObjectStore('prayers', { keyPath: 'id' });
+        prayersStore.createIndex('language', 'language', { unique: false });
+        prayersStore.createIndex('slug', 'slug', { unique: false });
+        prayersStore.createIndex('cachedAt', 'cachedAt', { unique: false });
+        console.log('Created prayers object store');
+      }
+
+      // Create metadata store
+      if (!db.objectStoreNames.contains('metadata')) {
+        db.createObjectStore('metadata', { keyPath: 'key' });
+        console.log('Created metadata object store');
+      }
+    } catch (error) {
+      console.error('Error creating object stores:', error);
+    }
   }
 
   // Ensure DB is initialized
