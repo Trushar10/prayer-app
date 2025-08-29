@@ -63,7 +63,7 @@ export default function DebugPanel() {
         try {
           const cacheNames = await caches.keys();
           info.cacheStatus = cacheNames;
-  } catch (_err) {
+        } catch (_err) { // eslint-disable-line @typescript-eslint/no-unused-vars
           info.cacheStatus = ['Error accessing caches'];
         }
       }

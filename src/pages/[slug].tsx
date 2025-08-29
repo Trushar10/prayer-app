@@ -14,7 +14,8 @@ const cleanUrlSlug = (text: string): string => {
 		.trim()
 		.toLowerCase()
 		.replace(/\s+/g, '-') // Replace spaces with hyphens
-		.replace(/\-\-+/g, '-'); // Replace multiple hyphens with single hyphen
+		.replace(/\-\-+/g, '-') // Replace multiple hyphens with single hyphen
+		.replace(/^-+|-+$/g, ''); // Remove leading/trailing hyphens
 };
 
 type PrayerSkeleton = EntrySkeletonType<{

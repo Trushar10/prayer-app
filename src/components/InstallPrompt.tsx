@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import offlineService from '../services/offlineService';
+import { contentDownloader } from '../services/contentDownloader';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -49,9 +49,21 @@ const InstallPrompt: React.FC<InstallPromptProps> = ({ onDownloadComplete }) => 
     setDownloadProgress(0);
     
     try {
-      await offlineService.downloadAllContent((progress) => {
-        setDownloadProgress(progress);
-      });
+      // Start progress polling
+      const progressInterval = setInterval(() => {
+        const progress = contentDownloader.getProgress();
+        setDownloadProgress(progress.percentage);
+        
+        if (!progress.isDownloading) {
+          clearInterval(progressInterval);
+        }
+      }, 500);
+      
+      await contentDownloader.downloadAllContent();
+      
+      // Clear interval and set final progress
+      clearInterval(progressInterval);
+      setDownloadProgress(100);
       
       // Call callback if provided
       onDownloadComplete?.();
@@ -73,9 +85,21 @@ const InstallPrompt: React.FC<InstallPromptProps> = ({ onDownloadComplete }) => 
       setIsDownloading(true);
       setDownloadProgress(0);
       
-      await offlineService.downloadAllContent((progress) => {
-        setDownloadProgress(progress);
-      });
+      // Start progress polling
+      const progressInterval = setInterval(() => {
+        const progress = contentDownloader.getProgress();
+        setDownloadProgress(progress.percentage);
+        
+        if (!progress.isDownloading) {
+          clearInterval(progressInterval);
+        }
+      }, 500);
+      
+      await contentDownloader.downloadAllContent();
+      
+      // Clear interval and set final progress
+      clearInterval(progressInterval);
+      setDownloadProgress(100);
       
       setIsDownloading(false);
       setDownloadProgress(0);

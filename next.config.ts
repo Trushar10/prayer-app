@@ -4,7 +4,7 @@ const withPWA = require('next-pwa')({
   dest: 'public',
   register: false, // We'll register manually in _app.tsx
   skipWaiting: true,
-  disable: false, // Always enabled for testing
+  disable: false, // Re-enabled for production
   swSrc: 'src/sw.simple.js', // Use our custom service worker
   fallbacks: {
     document: '/offline',

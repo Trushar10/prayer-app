@@ -4,8 +4,10 @@ import { Rasa } from 'next/font/google'
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { useEffect } from 'react'
 import { warmupServiceWorker } from '@/services/swWarmup'
+import { contentDownloader } from '@/services/contentDownloader'
 import DebugPanel from '../components/DebugPanel'
 import OfflineIndicator from '../components/OfflineIndicator'
+import ContentDownloadIndicator from '../components/ContentDownloadIndicator'
 
 const rasa = Rasa({
   subsets: ['latin'],
@@ -16,6 +18,7 @@ const rasa = Rasa({
 
 export default function App({ Component, pageProps }: AppProps) {
   useEffect(() => {
+    let heartbeat: NodeJS.Timeout | undefined;
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       // Expose simple debug object
   window.__SW_DEBUG = { attempts: 0, lastError: null, status: 'init' };
@@ -86,9 +89,17 @@ export default function App({ Component, pageProps }: AppProps) {
         } else {
           console.log('[SW] Registered successfully after', window.__SW_DEBUG?.attempts, 'attempt(s)');
           // Warmup after ready
-          navigator.serviceWorker.ready.then(() => {
+          navigator.serviceWorker.ready.then(async () => {
             console.log('[SW] ready - initiating warmup');
-            warmupServiceWorker();
+            await warmupServiceWorker();
+            
+            // Start automatic content download after SW is ready
+            console.log('[SW] Starting automatic content download...');
+            try {
+              await contentDownloader.downloadAllContent();
+            } catch (error) {
+              console.error('[SW] Content download failed:', error);
+            }
           });
         }
       };
@@ -107,7 +118,17 @@ export default function App({ Component, pageProps }: AppProps) {
       const ensureRegistered = () => {
         if (navigator.serviceWorker.controller) {
           console.log('[SW] Existing controller detected');
-          navigator.serviceWorker.ready.then(() => warmupServiceWorker());
+          navigator.serviceWorker.ready.then(async () => {
+            await warmupServiceWorker();
+            
+            // Start automatic content download for existing controller
+            console.log('[SW] Starting automatic content download for existing controller...');
+            try {
+              await contentDownloader.downloadAllContent();
+            } catch (error) {
+              console.error('[SW] Content download failed:', error);
+            }
+          });
           return;
         }
         registerWithRetries();
@@ -124,7 +145,7 @@ export default function App({ Component, pageProps }: AppProps) {
       ensureRegistered();
 
       // Add heartbeat to check SW status every 10 seconds
-      const heartbeat = setInterval(() => {
+      heartbeat = setInterval(() => {
         if (!navigator.serviceWorker.controller) {
           console.warn('[SW] No controller detected, attempting re-registration');
           ensureRegistered();
@@ -169,6 +190,7 @@ export default function App({ Component, pageProps }: AppProps) {
     window.addEventListener('unhandledrejection', handleUnhandledRejection);
 
     return () => {
+      if (heartbeat) clearInterval(heartbeat);
       window.removeEventListener('error', handleGlobalError);
       window.removeEventListener('unhandledrejection', handleUnhandledRejection);
     };
@@ -180,6 +202,7 @@ export default function App({ Component, pageProps }: AppProps) {
       <SpeedInsights />
       <DebugPanel />
       <OfflineIndicator />
+      <ContentDownloadIndicator />
     </main>
   )
 }

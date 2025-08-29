@@ -4,7 +4,7 @@ export async function warmupServiceWorker() {
     const targets = ['/', '/api/prayers?lang=en'];
     await Promise.all(targets.map(t => fetch(t).catch(() => undefined)));
     // Optionally message SW later for bulk prefetch
-  } catch (e) {
+  } catch (e) { // eslint-disable-line @typescript-eslint/no-unused-vars
     // Silent
   }
 }
