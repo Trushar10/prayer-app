@@ -5,9 +5,6 @@ const withPWA = require('next-pwa')({
   register: false, // We'll register manually in _app.tsx
   skipWaiting: true,
   disable: false, // Re-enabled for production
-  fallbacks: {
-    document: '/offline',
-  },
   buildExcludes: [/middleware-manifest\.json$/, /dynamic-css-manifest\.json$/],
   // Ensure workbox is available for registration
   scope: '/',
