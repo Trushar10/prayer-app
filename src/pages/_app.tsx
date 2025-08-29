@@ -3,6 +3,8 @@ import type { AppProps } from 'next/app'
 import { Rasa } from 'next/font/google'
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { useEffect } from 'react'
+import { warmupServiceWorker } from '@/services/swWarmup'
+import DebugPanel from '../components/DebugPanel'
 
 const rasa = Rasa({
   subsets: ['latin'],
@@ -17,7 +19,7 @@ export default function App({ Component, pageProps }: AppProps) {
       // Expose simple debug object
   window.__SW_DEBUG = { attempts: 0, lastError: null, status: 'init' };
 
-      const attemptRegistration = async (): Promise<ServiceWorkerRegistration | null> => {
+  const attemptRegistration = async (): Promise<ServiceWorkerRegistration | null> => {
   if (window.__SW_DEBUG) window.__SW_DEBUG.attempts++;
         try {
           // Confirm file is actually reachable before calling register
@@ -73,15 +75,42 @@ export default function App({ Component, pageProps }: AppProps) {
           console.error('[SW] Failed to register after retries. Debug:', window.__SW_DEBUG);
         } else {
           console.log('[SW] Registered successfully after', window.__SW_DEBUG?.attempts, 'attempt(s)');
+          // Warmup after ready
+          navigator.serviceWorker.ready.then(() => {
+            console.log('[SW] ready - initiating warmup');
+            warmupServiceWorker();
+          });
         }
       };
 
       // If already controlled, skip
-      if (navigator.serviceWorker.controller) {
-        console.log('[SW] Existing controller detected, skipping re-registration');
-      } else {
+      // Controller change -> reload once to get SW control on initial install
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!reloaded) {
+          reloaded = true;
+          console.log('[SW] controllerchange -> reloading to allow full offline control');
+          setTimeout(() => window.location.reload(), 50);
+        }
+      });
+
+      const ensureRegistered = () => {
+        if (navigator.serviceWorker.controller) {
+          console.log('[SW] Existing controller detected');
+          navigator.serviceWorker.ready.then(() => warmupServiceWorker());
+          return;
+        }
         registerWithRetries();
-      }
+        // Fallback retry after 5s if still no controller
+        setTimeout(() => {
+          if (!navigator.serviceWorker.controller) {
+            console.warn('[SW] No controller after initial attempts, retrying registration');
+            registerWithRetries();
+          }
+        }, 5000);
+      };
+
+      ensureRegistered();
     }
 
     // Global error handler for uncaught exceptions
@@ -117,6 +146,7 @@ export default function App({ Component, pageProps }: AppProps) {
     <main className={rasa.className}>
       <Component {...pageProps} />
       <SpeedInsights />
+      <DebugPanel />
     </main>
   )
 }
