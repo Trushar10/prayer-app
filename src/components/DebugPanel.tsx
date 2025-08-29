@@ -28,11 +28,23 @@ export default function DebugPanel() {
 
       // Check service worker
       if ('serviceWorker' in navigator) {
-        const registration = await navigator.serviceWorker.getRegistration();
-        if (registration) {
-          info.serviceWorkerStatus = registration.active ? 'Active' : 'Installing';
-        } else {
-          info.serviceWorkerStatus = 'Not registered';
+        try {
+          const registration = await navigator.serviceWorker.getRegistration();
+          if (registration) {
+            if (registration.active) {
+              info.serviceWorkerStatus = 'Active ✅';
+            } else if (registration.installing) {
+              info.serviceWorkerStatus = 'Installing ⏳';
+            } else if (registration.waiting) {
+              info.serviceWorkerStatus = 'Waiting 🔄';
+            } else {
+              info.serviceWorkerStatus = 'Registered but inactive';
+            }
+          } else {
+            info.serviceWorkerStatus = 'Not registered ❌';
+          }
+        } catch (error) {
+          info.serviceWorkerStatus = 'Registration failed ❌';
         }
       }
 
