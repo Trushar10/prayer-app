@@ -8,6 +8,7 @@ import ThemeToggle from '../components/ThemeToggle'
 import LanguageToggle from '../components/LanguageToggle'
 import OfflineIndicator from '../components/OfflineIndicator'
 import InstallPrompt from '../components/InstallPrompt'
+import DebugPanel from '../components/DebugPanel'
 import { usePWA } from '../hooks/usePWA'
 import { 
   getCachedPrayer, 
@@ -842,6 +843,7 @@ function PrayerApp() {
           </div>
         </div>
         <ThemeToggle className="theme-toggle-fixed" />
+        <DebugPanel />
       </div>
     </>
   )
