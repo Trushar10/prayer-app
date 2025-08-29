@@ -3,7 +3,6 @@ import type { AppProps } from 'next/app'
 import { Rasa } from 'next/font/google'
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { useEffect } from 'react'
-import { warmupServiceWorker } from '@/services/swWarmup'
 import { contentDownloader } from '@/services/contentDownloader'
 import DebugPanel from '../components/DebugPanel'
 import OfflineIndicator from '../components/OfflineIndicator'
