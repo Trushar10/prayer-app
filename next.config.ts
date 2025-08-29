@@ -9,6 +9,33 @@ const withPWA = require('next-pwa')({
   // Ensure workbox is available for registration
   scope: '/',
   cacheOnFrontEndNav: true,
+  // Add offline fallback configuration
+  fallbacks: {
+    document: '/offline',
+  },
+  // Filter out offline.html from precache manifest
+  manifestTransforms: [
+    (manifestEntries: any[]) => {
+      return {
+        manifest: manifestEntries.filter((entry: any) => !entry.url.includes('offline.html')),
+        warnings: [],
+      };
+    },
+  ],
+  // Additional runtime caching for offline page
+  runtimeCaching: [
+    {
+      urlPattern: /^\/offline$/,
+      handler: 'NetworkFirst',
+      options: {
+        cacheName: 'offline-fallback',
+        expiration: {
+          maxEntries: 1,
+          maxAgeSeconds: 24 * 60 * 60, // 24 hours
+        },
+      },
+    },
+  ],
 });
 
 module.exports = withPWA({
@@ -28,19 +55,6 @@ module.exports = withPWA({
           {
             key: 'Content-Type',
             value: 'application/javascript; charset=utf-8',
-          },
-        ],
-      },
-      {
-        source: '/offline.html',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, max-age=3600',
-          },
-          {
-            key: 'Content-Type',
-            value: 'text/html; charset=utf-8',
           },
         ],
       },

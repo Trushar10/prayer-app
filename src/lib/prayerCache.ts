@@ -31,7 +31,7 @@ export interface CacheMetadata {
 
 class PrayerCacheManager {
   private dbName = 'PrayerCache';
-  private version = 4; // Bumped to 4 to force upgrade ensuring stores/indexes exist
+  private version = 5; // Increment version to force schema update
   private db: IDBDatabase | null = null;
 
   // Initialize IndexedDB
@@ -48,99 +48,63 @@ class PrayerCacheManager {
       return;
     }
 
-    // Force database cleanup on version change to prevent corruption
     console.log('Initializing PrayerCache with version', this.version);
-    
-    return new Promise((resolve) => {
-      try {
-        const request = indexedDB.open(this.dbName, this.version);
 
-        request.onerror = () => {
-          console.error('Failed to open IndexedDB:', request.error);
-          // Force delete and recreate on error
-          console.log('Forcing database deletion due to error');
-          const deleteReq = indexedDB.deleteDatabase(this.dbName);
-          deleteReq.onsuccess = () => {
-            console.log('Database deleted, reopening...');
-            const reopenReq = indexedDB.open(this.dbName, this.version);
-            reopenReq.onupgradeneeded = (event) => {
-              this.createObjectStores((event.target as IDBOpenDBRequest).result);
-            };
-            reopenReq.onsuccess = () => {
-              this.db = reopenReq.result;
-              console.log('Database recreated successfully');
-              resolve();
-            };
-            reopenReq.onerror = () => {
-              console.error('Failed to recreate database:', reopenReq.error);
-              resolve();
-            };
-          };
-          deleteReq.onerror = () => {
-            console.error('Failed to delete corrupted database');
-            resolve();
-          };
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open(this.dbName, this.version);
+
+      request.onupgradeneeded = (event) => {
+        console.log('Database upgrade needed');
+        const db = (event.target as IDBOpenDBRequest).result;
+        this.createObjectStores(db);
+      };
+
+      request.onsuccess = () => {
+        this.db = request.result;
+        console.log('IndexedDB initialized successfully');
+        resolve();
+      };
+
+      request.onerror = () => {
+        console.error('Failed to open IndexedDB:', request.error);
+        // Try to delete and recreate the database
+        this.forceRecreateDatabase().then(resolve).catch(reject);
+      };
+    });
+  }
+
+  // Force recreate database if corrupted
+  private async forceRecreateDatabase(): Promise<void> {
+    console.log('Attempting to recreate corrupted database...');
+
+    return new Promise((resolve) => {
+      const deleteRequest = indexedDB.deleteDatabase(this.dbName);
+
+      deleteRequest.onsuccess = () => {
+        console.log('Database deleted, recreating...');
+        const recreateRequest = indexedDB.open(this.dbName, this.version);
+
+        recreateRequest.onupgradeneeded = (event) => {
+          const db = (event.target as IDBOpenDBRequest).result;
+          this.createObjectStores(db);
         };
 
-        request.onerror = () => {
-          console.error('Failed to open IndexedDB:', request.error);
-          // Don't reject, just warn and continue without cache
-          console.warn('Continuing without cache functionality');
+        recreateRequest.onsuccess = () => {
+          this.db = recreateRequest.result;
+          console.log('Database recreated successfully');
           resolve();
         };
 
-        request.onsuccess = () => {
-          this.db = request.result;
-          // Defensive: verify required stores exist; if not, force rebuild
-          const requiredStores = ['prayers', 'metadata'];
-          const missing = requiredStores.filter(s => !this.db!.objectStoreNames.contains(s));
-          if (missing.length) {
-            console.warn('IndexedDB missing stores', missing, '— forcing rebuild');
-            this.db!.close();
-            const deleteReq = indexedDB.deleteDatabase(this.dbName);
-            deleteReq.onsuccess = () => {
-              // Re-open with same (already bumped) version to recreate
-              const reopen = indexedDB.open(this.dbName, this.version);
-              reopen.onupgradeneeded = (event) => {
-                try {
-                  const db2 = (event.target as IDBOpenDBRequest).result;
-                  this.createObjectStores(db2);
-                } catch (rebuildErr) {
-                  console.error('Error during rebuild upgrade:', rebuildErr);
-                }
-              };
-              reopen.onsuccess = () => {
-                this.db = reopen.result;
-                resolve();
-              };
-              reopen.onerror = () => {
-                console.error('Failed to reopen DB after rebuild:', reopen.error);
-                resolve();
-              };
-            };
-            deleteReq.onerror = () => {
-              console.error('Failed to delete DB for rebuild:', deleteReq.error);
-              resolve();
-            };
-          } else {
-            resolve();
-          }
+        recreateRequest.onerror = () => {
+          console.error('Failed to recreate database');
+          resolve(); // Continue without cache
         };
+      };
 
-        request.onupgradeneeded = (event) => {
-          try {
-            const db = (event.target as IDBOpenDBRequest).result;
-            console.log('Database upgrade needed, creating stores...');
-            this.createObjectStores(db);
-          } catch (upgradeError) {
-            console.error('Error during IndexedDB upgrade:', upgradeError);
-            resolve(); // Continue without cache
-          }
-        };
-      } catch (initError) {
-        console.error('Error initializing IndexedDB:', initError);
+      deleteRequest.onerror = () => {
+        console.error('Failed to delete database');
         resolve(); // Continue without cache
-      }
+      };
     });
   }
 
