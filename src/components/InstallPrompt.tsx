@@ -69,7 +69,18 @@ const InstallPrompt: React.FC<InstallPromptProps> = ({ onDownloadComplete }) => 
     if (!deferredPrompt) return;
 
     try {
-      // Show install prompt immediately to preserve user gesture
+      // First, download offline content
+      setIsDownloading(true);
+      setDownloadProgress(0);
+      
+      await offlineService.downloadAllContent((progress) => {
+        setDownloadProgress(progress);
+      });
+      
+      setIsDownloading(false);
+      setDownloadProgress(0);
+      
+      // After download is complete, show install prompt
       await deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
       
@@ -77,11 +88,27 @@ const InstallPrompt: React.FC<InstallPromptProps> = ({ onDownloadComplete }) => 
         setDeferredPrompt(null);
         setShowInstall(false);
         
-        // Download offline content after successful installation
-        await downloadOfflineContent();
+        // Call callback if provided
+        onDownloadComplete?.();
       }
     } catch (error) {
-      console.error('Error showing install prompt:', error);
+      console.error('Error during install process:', error);
+      setIsDownloading(false);
+      setDownloadProgress(0);
+      
+      // If download fails, still try to show install prompt
+      try {
+        await deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        
+        if (outcome === 'accepted') {
+          setDeferredPrompt(null);
+          setShowInstall(false);
+          onDownloadComplete?.();
+        }
+      } catch (promptError) {
+        console.error('Error showing install prompt:', promptError);
+      }
     }
   };
 
@@ -160,22 +187,62 @@ const InstallPrompt: React.FC<InstallPromptProps> = ({ onDownloadComplete }) => 
       onClick={handleInstallClick}
       disabled={isDownloading}
       className="install-btn"
-      title="Install app to home screen"
+      title={isDownloading ? `Downloading content... ${downloadProgress}%` : "Download content and install app to home screen"}
       style={{
         padding: '8px 12px',
-        backgroundColor: '#007bff',
+        backgroundColor: isDownloading ? '#6c757d' : '#007bff',
         color: 'white',
         border: 'none',
         borderRadius: '6px',
-        cursor: 'pointer',
+        cursor: isDownloading ? 'not-allowed' : 'pointer',
         fontSize: '14px',
         fontWeight: '500',
-        transition: 'all 0.2s ease'
+        transition: 'all 0.2s ease',
+        position: 'relative',
+        minWidth: isDownloading ? '120px' : '100px',
+        overflow: 'hidden'
       }}
     >
-      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-        📱 Install
-      </span>
+      {isDownloading ? (
+        <span style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span 
+            style={{ 
+              width: '12px', 
+              height: '12px', 
+              border: '2px solid transparent',
+              borderTop: '2px solid white',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite'
+            }} 
+          />
+          {downloadProgress}%
+        </span>
+      ) : (
+        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+          📱 Install
+        </span>
+      )}
+      
+      {isDownloading && (
+        <div 
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            height: '2px',
+            backgroundColor: 'rgba(255, 255, 255, 0.3)',
+            width: `${downloadProgress}%`,
+            transition: 'width 0.3s ease'
+          }}
+        />
+      )}
+      
+      <style jsx>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </button>
   );
 };

@@ -540,7 +540,13 @@ function PrayerApp() {
       } else {
         // Show error feedback to user
         console.error('Prayer not found:', slug)
-        setErrorMessage('This prayer is not available offline. Please connect to the internet and try again.')
+        // Check if we're offline and have some cached content before showing error
+        const isOffline = !navigator.onLine
+        if (isOffline && filteredPrayers.length > 0) {
+          setErrorMessage('This prayer is not downloaded yet. Please browse available prayers or connect to internet to download more.')
+        } else {
+          setErrorMessage('This prayer is not available offline. Please connect to the internet and try again.')
+        }
         setTimeout(() => setErrorMessage(''), 5000) // Clear after 5 seconds
       }
     } catch (error) {
@@ -714,7 +720,14 @@ function PrayerApp() {
             <main className="homepage">
               {hasError ? (
                 <div className="error-message" style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
-                  <p>Unable to load prayers. Please check your internet connection and try again.</p>
+                  {!navigator.onLine ? (
+                    <div>
+                      <p>You&apos;re currently offline.</p>
+                      <p>Some prayers may not be available yet. Use the download button to save content for offline use.</p>
+                    </div>
+                  ) : (
+                    <p>Unable to load prayers. Please check your internet connection and try again.</p>
+                  )}
                   <button onClick={() => {
                     setHasError(false)
                     window.location.reload()

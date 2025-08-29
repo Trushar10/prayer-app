@@ -1,9 +1,6 @@
 import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
 import { registerRoute, NavigationRoute } from 'workbox-routing';
-import {
-	CacheFirst,
-	NetworkFirst,
-} from 'workbox-strategies';
+import { CacheFirst } from 'workbox-strategies';
 import { CacheableResponsePlugin } from 'workbox-cacheable-response';
 import { ExpirationPlugin } from 'workbox-expiration';
 
@@ -34,7 +31,7 @@ registerRoute(
 					!url.pathname.endsWith('.ico')))
 		);
 	},
-	new NetworkFirst({
+	new CacheFirst({
 		cacheName: `pages-cache-${CACHE_VERSION}`,
 		plugins: [
 			new CacheableResponsePlugin({
@@ -45,7 +42,6 @@ registerRoute(
 				maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
 			}),
 		],
-		networkTimeoutSeconds: 3, // Fallback to cache after 3 seconds
 	})
 );
 
@@ -124,14 +120,17 @@ registerRoute(
 // Handle offline navigation - serve cached page or offline page
 registerRoute(
 	new NavigationRoute(
-		new NetworkFirst({
-			cacheName: 'navigation-cache',
+		new CacheFirst({
+			cacheName: `navigation-cache-${CACHE_VERSION}`,
 			plugins: [
 				new CacheableResponsePlugin({
 					statuses: [0, 200],
 				}),
+				new ExpirationPlugin({
+					maxEntries: 50,
+					maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+				}),
 			],
-			networkTimeoutSeconds: 3,
 		})
 	)
 );

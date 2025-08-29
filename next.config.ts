@@ -4,7 +4,7 @@ const withPWA = require('next-pwa')({
   dest: 'public',
   register: false, // We'll register manually in usePWA hook
   skipWaiting: true,
-  disable: !isProd, // Only enable in production
+  disable: false, // Enable in development for testing
   swSrc: 'src/sw.simple.js',
   swDest: 'public/sw.js',
   fallbacks: {
