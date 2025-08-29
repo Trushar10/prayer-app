@@ -25,76 +25,64 @@ export default function App({ Component, pageProps }: AppProps) {
 
   const attemptRegistration = async (): Promise<ServiceWorkerRegistration | null> => {
   if (window.__SW_DEBUG) window.__SW_DEBUG.attempts++;
-        try {
-          // Confirm file is actually reachable before calling register
-            const swResp = await fetch('/sw.js?cacheBust=' + Date.now(), { method: 'GET' });
-            if (!swResp.ok) {
-              throw new Error('sw.js not reachable. HTTP ' + swResp.status);
-            }
-          const windowWithWorkbox = window as unknown as { workbox?: { register: () => Promise<ServiceWorkerRegistration> } };
-          let registration: ServiceWorkerRegistration;
-          if (windowWithWorkbox.workbox) {
-            console.log('[SW] Using workbox.register()');
-            registration = await windowWithWorkbox.workbox.register();
-          } else {
-            console.log('[SW] Using navigator.serviceWorker.register("/sw.js")');
-            registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-          }
-          console.log('[SW] Registration object:', registration);
-          if (window.__SW_DEBUG) window.__SW_DEBUG.status = 'registered';
-          // Attach update diagnostics
-          registration.addEventListener('updatefound', () => {
-            const nw = registration.installing;
-            console.log('[SW] updatefound, installing state:', nw?.state);
-            nw?.addEventListener('statechange', () => {
-              console.log('[SW] installing statechange ->', nw.state);
-            });
-          });
-          return registration;
-        } catch (err) {
-          console.warn('[SW] Main SW failed, trying simple fallback:', (err as Error).message);
-          try {
-            // Fallback to simple service worker
-            const simpleRegistration = await navigator.serviceWorker.register('/sw-simple.js', { scope: '/' });
-            console.log('[SW] Simple SW registered successfully');
-            if (window.__SW_DEBUG) window.__SW_DEBUG.status = 'registered-simple';
-            return simpleRegistration;
-          } catch (simpleErr) {
-            if (window.__SW_DEBUG) {
-              window.__SW_DEBUG.lastError = (simpleErr as Error).message;
-              window.__SW_DEBUG.status = 'error';
-            }
-            console.warn('[SW] Simple SW also failed:', simpleErr);
-            return null;
-          }
+    try {
+      console.log('[SW] Attempting registration...');
+      
+      // Try main service worker first
+      const registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+      console.log('[SW] Main SW registered successfully:', registration);
+      
+      if (window.__SW_DEBUG) window.__SW_DEBUG.status = 'registered';
+      
+      // Wait for the SW to be ready
+      await navigator.serviceWorker.ready;
+      console.log('[SW] SW is ready and controlling:', navigator.serviceWorker.controller);
+      
+      return registration;
+    } catch (err) {
+      console.warn('[SW] Main SW failed:', (err as Error).message);
+      
+      // Try simple fallback
+      try {
+        console.log('[SW] Trying simple SW fallback...');
+        const simpleRegistration = await navigator.serviceWorker.register('/sw-simple.js', { scope: '/' });
+        console.log('[SW] Simple SW registered successfully');
+        
+        if (window.__SW_DEBUG) window.__SW_DEBUG.status = 'registered-simple';
+        return simpleRegistration;
+      } catch (simpleErr) {
+        console.error('[SW] Simple SW also failed:', simpleErr);
+        
+        if (window.__SW_DEBUG) {
+          window.__SW_DEBUG.lastError = (simpleErr as Error).message;
+          window.__SW_DEBUG.status = 'error';
         }
-      };
+        return null;
+      }
+    }
+  };
 
       const registerWithRetries = async () => {
-        // Wait for window load to avoid race with Next.js client chunks
-        if (document.readyState !== 'complete') {
-          await new Promise<void>(res => window.addEventListener('load', () => res(), { once: true }));
-        }
-        // Small delay to ensure sw.js copied / served
-        await new Promise(r => setTimeout(r, 150));
+        console.log('[SW] Starting registration process...');
+        
         let registration: ServiceWorkerRegistration | null = null;
         for (let i = 0; i < 3 && !registration; i++) {
+          console.log(`[SW] Registration attempt ${i + 1}/3`);
           registration = await attemptRegistration();
           if (!registration) {
-            await new Promise(r => setTimeout(r, 500 * (i + 1))); // backoff
+            console.log(`[SW] Attempt ${i + 1} failed, waiting before retry...`);
+            await new Promise(r => setTimeout(r, 1000 * (i + 1))); // backoff
           }
         }
+        
         if (!registration) {
-          console.error('[SW] Failed to register after retries. Debug:', window.__SW_DEBUG);
+          console.error('[SW] All registration attempts failed. Debug:', window.__SW_DEBUG);
         } else {
-          console.log('[SW] Registered successfully after', window.__SW_DEBUG?.attempts, 'attempt(s)');
-          // Warmup after ready
+          console.log('[SW] Registration successful after', window.__SW_DEBUG?.attempts, 'attempt(s)');
+          
+          // Start content download after SW is ready
           navigator.serviceWorker.ready.then(async () => {
-            console.log('[SW] ready - initiating warmup');
-            await warmupServiceWorker();
-            
-            // Start automatic content download after SW is ready
-            console.log('[SW] Starting automatic content download...');
+            console.log('[SW] SW ready - starting content download...');
             try {
               await contentDownloader.downloadAllContent();
             } catch (error) {
@@ -117,12 +105,8 @@ export default function App({ Component, pageProps }: AppProps) {
 
       const ensureRegistered = () => {
         if (navigator.serviceWorker.controller) {
-          console.log('[SW] Existing controller detected');
+          console.log('[SW] Existing controller detected, starting content download...');
           navigator.serviceWorker.ready.then(async () => {
-            await warmupServiceWorker();
-            
-            // Start automatic content download for existing controller
-            console.log('[SW] Starting automatic content download for existing controller...');
             try {
               await contentDownloader.downloadAllContent();
             } catch (error) {
@@ -131,28 +115,43 @@ export default function App({ Component, pageProps }: AppProps) {
           });
           return;
         }
+        
+        // Start registration
         registerWithRetries();
-        // Fallback retry after 5s if still no controller
-        setTimeout(() => {
-          if (!navigator.serviceWorker.controller) {
-            console.warn('[SW] No controller after initial attempts, retrying registration');
-            registerWithRetries();
-          }
-        }, 5000);
       };
 
       // Force registration immediately
       ensureRegistered();
 
-      // Add heartbeat to check SW status every 10 seconds
+      // Add heartbeat to check SW status every 30 seconds
       heartbeat = setInterval(() => {
-        if (!navigator.serviceWorker.controller) {
-          console.warn('[SW] No controller detected, attempting re-registration');
-          ensureRegistered();
+        const controller = navigator.serviceWorker.controller;
+        console.log('[SW] Heartbeat - Controller:', controller ? 'active' : 'none');
+        
+        if (!controller) {
+          console.log('[SW] No controller, checking registration status...');
+          navigator.serviceWorker.getRegistration().then(registration => {
+            if (registration) {
+              console.log('[SW] Registration exists but no controller, state:', registration.active?.state);
+            } else {
+              console.log('[SW] No registration found, attempting re-registration...');
+              ensureRegistered();
+            }
+          });
         }
-      }, 10000);
+      }, 30000);
 
-      // Add offline/online detection
+      // Add service worker state change listeners
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        console.log('[SW] Controller changed, new controller:', navigator.serviceWorker.controller);
+        if (window.__SW_DEBUG) {
+          window.__SW_DEBUG.status = navigator.serviceWorker.controller ? 'controlled' : 'uncontrolled';
+        }
+      });
+
+      navigator.serviceWorker.addEventListener('message', (event) => {
+        console.log('[SW] Message from SW:', event.data);
+      });
       const handleOnlineStatus = () => {
         const isOnline = navigator.onLine;
         console.log('[SW] Network status changed:', isOnline ? 'online' : 'offline');
