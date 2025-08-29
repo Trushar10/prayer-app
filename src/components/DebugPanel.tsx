@@ -8,7 +8,7 @@ interface DebugInfo {
   registrationError?: string;
   controller?: boolean;
   swAttempts?: number;
-  swLastError?: string;
+  swLastError?: string | null;
 }
 
 export default function DebugPanel() {
@@ -31,8 +31,8 @@ export default function DebugPanel() {
         themeStatus: document.documentElement.getAttribute('data-theme') || 'not set',
         registrationError: undefined,
         controller: !!navigator.serviceWorker?.controller,
-        swAttempts: (window as any).__SW_DEBUG?.attempts,
-        swLastError: (window as any).__SW_DEBUG?.lastError
+  swAttempts: window.__SW_DEBUG?.attempts,
+  swLastError: window.__SW_DEBUG?.lastError
       };
 
       // Check service worker
@@ -63,7 +63,7 @@ export default function DebugPanel() {
         try {
           const cacheNames = await caches.keys();
           info.cacheStatus = cacheNames;
-        } catch (err) {
+  } catch (_err) {
           info.cacheStatus = ['Error accessing caches'];
         }
       }

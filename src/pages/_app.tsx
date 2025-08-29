@@ -15,10 +15,10 @@ export default function App({ Component, pageProps }: AppProps) {
   useEffect(() => {
     if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
       // Expose simple debug object
-      (window as any).__SW_DEBUG = { attempts: 0, lastError: null, status: 'init' };
+  window.__SW_DEBUG = { attempts: 0, lastError: null, status: 'init' };
 
       const attemptRegistration = async (): Promise<ServiceWorkerRegistration | null> => {
-        (window as any).__SW_DEBUG.attempts++;
+  if (window.__SW_DEBUG) window.__SW_DEBUG.attempts++;
         try {
           // Confirm file is actually reachable before calling register
             const swResp = await fetch('/sw.js?cacheBust=' + Date.now(), { method: 'GET' });
@@ -35,7 +35,7 @@ export default function App({ Component, pageProps }: AppProps) {
             registration = await navigator.serviceWorker.register('/sw.js', { scope: '/' });
           }
           console.log('[SW] Registration object:', registration);
-          (window as any).__SW_DEBUG.status = 'registered';
+          if (window.__SW_DEBUG) window.__SW_DEBUG.status = 'registered';
           // Attach update diagnostics
           registration.addEventListener('updatefound', () => {
             const nw = registration.installing;
@@ -46,8 +46,10 @@ export default function App({ Component, pageProps }: AppProps) {
           });
           return registration;
         } catch (err) {
-          (window as any).__SW_DEBUG.lastError = (err as Error).message;
-          (window as any).__SW_DEBUG.status = 'error';
+          if (window.__SW_DEBUG) {
+            window.__SW_DEBUG.lastError = (err as Error).message;
+            window.__SW_DEBUG.status = 'error';
+          }
           console.warn('[SW] Registration attempt failed:', err);
           return null;
         }
@@ -68,9 +70,9 @@ export default function App({ Component, pageProps }: AppProps) {
           }
         }
         if (!registration) {
-          console.error('[SW] Failed to register after retries. Debug:', (window as any).__SW_DEBUG);
+          console.error('[SW] Failed to register after retries. Debug:', window.__SW_DEBUG);
         } else {
-          console.log('[SW] Registered successfully after', (window as any).__SW_DEBUG.attempts, 'attempt(s)');
+          console.log('[SW] Registered successfully after', window.__SW_DEBUG?.attempts, 'attempt(s)');
         }
       };
 
